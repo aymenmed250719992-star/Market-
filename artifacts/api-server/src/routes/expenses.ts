@@ -1,15 +1,18 @@
 import { Router, type IRouter } from "express";
-import { db, expensesTable, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { firestore, nextId, tsToDate } from "../lib/firebase";
 import { z } from "zod";
 
 const router: IRouter = Router();
 
-const toExpense = (e: typeof expensesTable.$inferSelect) => ({
-  ...e,
-  amount: parseFloat(e.amount),
-  dailyAmount: e.dailyAmount ? parseFloat(e.dailyAmount) : null,
-});
+function toExpense(id: number, data: any) {
+  return {
+    ...data,
+    id,
+    createdAt: tsToDate(data.createdAt),
+    amount: parseFloat(data.amount),
+    dailyAmount: data.dailyAmount != null ? parseFloat(data.dailyAmount) : null,
+  };
+}
 
 const CreateExpenseBody = z.object({
   name: z.string().min(1),
@@ -24,31 +27,25 @@ const CreateExpenseBody = z.object({
 function calcDailyAmount(type: string, amount: number, daysInMonth: number): number | null {
   if (type === "monthly") return amount / daysInMonth;
   if (type === "daily") return amount;
-  return null; // one_time — not amortized
+  return null;
 }
 
 router.get("/expenses", async (req, res): Promise<void> => {
+  const snap = await firestore.collection("expenses").orderBy("createdAt", "desc").get();
+  let expenses = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
   const month = req.query.month as string | undefined;
-  let expenses = await db
-    .select()
-    .from(expensesTable)
-    .orderBy(sql`${expensesTable.createdAt} desc`);
-
-  if (month) expenses = expenses.filter((e) => e.month === month);
-  res.json(expenses.map(toExpense));
+  if (month) expenses = expenses.filter(({ raw }) => raw.month === month);
+  res.json(expenses.map(({ raw, id }) => toExpense(id, raw)));
 });
 
-// Get total daily allocated expenses for today / a specific date
 router.get("/expenses/daily-total", async (req, res): Promise<void> => {
   const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
-  const expenses = await db.select().from(expensesTable);
-  const monthExpenses = expenses.filter((e) => e.month === month);
-
-  const total = monthExpenses.reduce((sum, e) => {
-    const daily = e.dailyAmount ? parseFloat(e.dailyAmount) : 0;
+  const snap = await firestore.collection("expenses").get();
+  const monthExpenses = snap.docs.filter((d) => d.data().month === month);
+  const total = monthExpenses.reduce((sum, d) => {
+    const daily = d.data().dailyAmount ? parseFloat(d.data().dailyAmount) : 0;
     return sum + daily;
   }, 0);
-
   res.json({ month, dailyTotal: total });
 });
 
@@ -66,36 +63,36 @@ router.post("/expenses", async (req, res): Promise<void> => {
     try {
       const payload = JSON.parse(Buffer.from(token, "base64").toString());
       addedById = payload.id;
-      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, payload.id));
-      if (user) addedByName = user.name;
+      const userSnap = await firestore.collection("users").doc(String(payload.id)).get();
+      if (userSnap.exists) addedByName = userSnap.data()!.name;
     } catch {}
   }
 
   const days = parsed.data.daysInMonth ?? 30;
   const dailyAmount = calcDailyAmount(parsed.data.type, parsed.data.amount, days);
-
-  const [expense] = await db
-    .insert(expensesTable)
-    .values({
-      ...parsed.data,
-      amount: parsed.data.amount.toString(),
-      daysInMonth: days,
-      dailyAmount: dailyAmount !== null ? dailyAmount.toString() : null,
-      addedById,
-      addedByName,
-    })
-    .returning();
-
-  res.status(201).json(toExpense(expense));
+  const id = await nextId("expenses");
+  const now = new Date();
+  const data = {
+    ...parsed.data,
+    amount: parsed.data.amount.toString(),
+    daysInMonth: days,
+    dailyAmount: dailyAmount !== null ? dailyAmount.toString() : null,
+    addedById,
+    addedByName,
+    createdAt: now,
+  };
+  await firestore.collection("expenses").doc(String(id)).set(data);
+  res.status(201).json(toExpense(id, data));
 });
 
 router.delete("/expenses/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-  const [expense] = await db.delete(expensesTable).where(eq(expensesTable.id, id)).returning();
-  if (!expense) {
+  const id = req.params.id as string;
+  const snap = await firestore.collection("expenses").doc(id).get();
+  if (!snap.exists) {
     res.status(404).json({ error: "المصروف غير موجود" });
     return;
   }
+  await firestore.collection("expenses").doc(id).delete();
   res.sendStatus(204);
 });
 

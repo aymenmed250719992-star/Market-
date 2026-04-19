@@ -1,11 +1,19 @@
 import { Router, type IRouter } from "express";
-import { db, tasksTable, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
 
 const router: IRouter = Router();
 
-const toTask = (t: typeof tasksTable.$inferSelect) => ({ ...t });
+function toTask(id: number, data: any) {
+  return {
+    ...data,
+    id,
+    createdAt: tsToDate(data.createdAt),
+    completedAt: tsToDate(data.completedAt),
+    approvedAt: tsToDate(data.approvedAt),
+  };
+}
 
 const CreateTaskBody = z.object({
   title: z.string().min(1),
@@ -18,30 +26,19 @@ const CreateTaskBody = z.object({
   notes: z.string().optional(),
 });
 
-const CompleteTaskBody = z.object({
-  notes: z.string().optional(),
-});
-
-const ApproveTaskBody = z.object({
-  approved: z.boolean(),
-  notes: z.string().optional(),
-});
+const CompleteTaskBody = z.object({ notes: z.string().optional() });
+const ApproveTaskBody = z.object({ approved: z.boolean(), notes: z.string().optional() });
 
 router.get("/tasks", async (req, res): Promise<void> => {
-  const status = req.query.status as string | undefined;
-  const type = req.query.type as string | undefined;
-  const assignedToId = req.query.assignedToId ? parseInt(req.query.assignedToId as string) : undefined;
+  const snap = await firestore.collection("tasks").orderBy("createdAt", "desc").get();
+  let tasks = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
 
-  let tasks = await db
-    .select()
-    .from(tasksTable)
-    .orderBy(sql`${tasksTable.createdAt} desc`);
+  const { status, type, assignedToId } = req.query as Record<string, string | undefined>;
+  if (status) tasks = tasks.filter(({ raw }) => raw.status === status);
+  if (type) tasks = tasks.filter(({ raw }) => raw.type === type);
+  if (assignedToId) tasks = tasks.filter(({ raw }) => raw.assignedToId === parseInt(assignedToId, 10));
 
-  if (status) tasks = tasks.filter((t) => t.status === status);
-  if (type) tasks = tasks.filter((t) => t.type === type);
-  if (assignedToId) tasks = tasks.filter((t) => t.assignedToId === assignedToId);
-
-  res.json(tasks.map(toTask));
+  res.json(tasks.map(({ raw, id }) => toTask(id, raw)));
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
@@ -52,66 +49,72 @@ router.post("/tasks", async (req, res): Promise<void> => {
   }
 
   const token = req.cookies?.session ?? req.headers.authorization?.replace("Bearer ", "");
-  let reportedById: number | undefined;
+  let reportedById: number | null = null;
   let reportedByName = "موظف";
   if (token) {
     try {
       const payload = JSON.parse(Buffer.from(token, "base64").toString());
       reportedById = payload.id;
-      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, payload.id));
-      if (user) reportedByName = user.name;
+      const userSnap = await firestore.collection("users").doc(String(payload.id)).get();
+      if (userSnap.exists) reportedByName = userSnap.data()!.name;
     } catch {}
   }
 
-  let assignedToName: string | undefined;
+  let assignedToName: string | null = null;
   if (parsed.data.assignedToId) {
-    const [assignee] = await db.select().from(usersTable).where(eq(usersTable.id, parsed.data.assignedToId));
-    if (assignee) assignedToName = assignee.name;
+    const assigneeSnap = await firestore.collection("users").doc(String(parsed.data.assignedToId)).get();
+    if (assigneeSnap.exists) assignedToName = assigneeSnap.data()!.name;
   }
 
-  const [task] = await db
-    .insert(tasksTable)
-    .values({
-      ...parsed.data,
-      reportedById: reportedById ?? null,
-      reportedByName,
-      assignedToName: assignedToName ?? null,
-      status: "pending",
-    })
-    .returning();
-  res.status(201).json(toTask(task));
+  const id = await nextId("tasks");
+  const now = new Date();
+  const data = {
+    ...parsed.data,
+    reportedById,
+    reportedByName,
+    assignedToName,
+    status: "pending",
+    approvedById: null,
+    approvedByName: null,
+    approvedAt: null,
+    completedAt: null,
+    createdAt: now,
+  };
+  await firestore.collection("tasks").doc(String(id)).set(data);
+  res.status(201).json(toTask(id, data));
 });
 
-// Worker marks task as completed
 router.patch("/tasks/:id/complete", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
+  const id = req.params.id as string;
   const parsed = CompleteTaskBody.safeParse(req.body);
-
-  const [task] = await db
-    .update(tasksTable)
-    .set({
-      status: "completed",
-      notes: parsed.success ? parsed.data.notes ?? null : null,
-      completedAt: new Date(),
-    })
-    .where(eq(tasksTable.id, id))
-    .returning();
-
-  if (!task) {
+  const snap = await firestore.collection("tasks").doc(id).get();
+  if (!snap.exists) {
     res.status(404).json({ error: "المهمة غير موجودة" });
     return;
   }
-  res.json(toTask(task));
+  await firestore.collection("tasks").doc(id).update({
+    status: "completed",
+    notes: parsed.success && parsed.data.notes ? parsed.data.notes : null,
+    completedAt: new Date(),
+  });
+  const updated = await firestore.collection("tasks").doc(id).get();
+  res.json(toTask(parseInt(updated.id, 10), updated.data()!));
 });
 
-// Admin approves or rejects task (and awards/cancels points)
 router.patch("/tasks/:id/approve", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
+  const id = req.params.id as string;
   const parsed = ApproveTaskBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "بيانات غير صحيحة" });
     return;
   }
+
+  const snap = await firestore.collection("tasks").doc(id).get();
+  if (!snap.exists) {
+    res.status(404).json({ error: "المهمة غير موجودة" });
+    return;
+  }
+  const existing = snap.data()!;
 
   const token = req.cookies?.session ?? req.headers.authorization?.replace("Bearer ", "");
   let approvedById: number | null = null;
@@ -120,49 +123,38 @@ router.patch("/tasks/:id/approve", async (req, res): Promise<void> => {
     try {
       const payload = JSON.parse(Buffer.from(token, "base64").toString());
       approvedById = payload.id;
-      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, payload.id));
-      if (user) approvedByName = user.name;
+      const userSnap = await firestore.collection("users").doc(String(payload.id)).get();
+      if (userSnap.exists) approvedByName = userSnap.data()!.name;
     } catch {}
   }
 
-  const [existing] = await db.select().from(tasksTable).where(eq(tasksTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "المهمة غير موجودة" });
-    return;
-  }
-
   const newStatus = parsed.data.approved ? "approved" : "rejected";
+  await firestore.collection("tasks").doc(id).update({
+    status: newStatus,
+    approvedById,
+    approvedByName,
+    approvedAt: new Date(),
+    notes: parsed.data.notes ?? existing.notes ?? null,
+  });
 
-  const [task] = await db
-    .update(tasksTable)
-    .set({
-      status: newStatus,
-      approvedById,
-      approvedByName,
-      approvedAt: new Date(),
-      notes: parsed.data.notes ?? existing.notes,
-    })
-    .where(eq(tasksTable.id, id))
-    .returning();
-
-  // If approved and has points, add to worker's activity_points
-  if (parsed.data.approved && existing.points && existing.points > 0 && existing.assignedToId) {
-    await db
-      .update(usersTable)
-      .set({ activityPoints: sql`${usersTable.activityPoints} + ${existing.points}` })
-      .where(eq(usersTable.id, existing.assignedToId));
+  if (parsed.data.approved && existing.points > 0 && existing.assignedToId) {
+    await firestore.collection("users").doc(String(existing.assignedToId)).update({
+      activityPoints: FieldValue.increment(existing.points),
+    });
   }
 
-  res.json(toTask(task));
+  const updated = await firestore.collection("tasks").doc(id).get();
+  res.json(toTask(parseInt(updated.id, 10), updated.data()!));
 });
 
 router.delete("/tasks/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-  const [task] = await db.delete(tasksTable).where(eq(tasksTable.id, id)).returning();
-  if (!task) {
+  const id = req.params.id as string;
+  const snap = await firestore.collection("tasks").doc(id).get();
+  if (!snap.exists) {
     res.status(404).json({ error: "المهمة غير موجودة" });
     return;
   }
+  await firestore.collection("tasks").doc(id).delete();
   res.sendStatus(204);
 });
 

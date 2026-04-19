@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, salesTable, productsTable, customersTable, shortagesTable, expensesTable, advancesTable } from "@workspace/db";
+import { firestore, tsToDate } from "../lib/firebase";
 
 const router: IRouter = Router();
 
@@ -11,22 +11,28 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   const currentMonth = todayDate.slice(0, 7);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  const [allSales, products, customers, shortages, expenses, advances] = await Promise.all([
-    db.select().from(salesTable),
-    db.select().from(productsTable),
-    db.select().from(customersTable),
-    db.select().from(shortagesTable),
-    db.select().from(expensesTable),
-    db.select().from(advancesTable),
+  const [salesSnap, productsSnap, customersSnap, shortagesSnap, expensesSnap, advancesSnap] = await Promise.all([
+    firestore.collection("sales").get(),
+    firestore.collection("products").get(),
+    firestore.collection("customers").get(),
+    firestore.collection("shortages").get(),
+    firestore.collection("expenses").get(),
+    firestore.collection("advances").get(),
   ]);
 
-  const todaySalesList = allSales.filter((s) => new Date(s.createdAt) >= today);
-  const monthSalesList = allSales.filter((s) => new Date(s.createdAt) >= monthStart);
+  const allSales = salesSnap.docs.map((d) => d.data());
+  const products = productsSnap.docs.map((d) => ({ ...d.data(), id: parseInt(d.id, 10) }));
+  const customers = customersSnap.docs.map((d) => d.data());
+  const shortages = shortagesSnap.docs.map((d) => d.data());
+  const expenses = expensesSnap.docs.map((d) => d.data());
+  const advances = advancesSnap.docs.map((d) => d.data());
+
+  const todaySalesList = allSales.filter((s) => tsToDate(s.createdAt) >= today);
+  const monthSalesList = allSales.filter((s) => tsToDate(s.createdAt) >= monthStart);
 
   const todayRevenue = todaySalesList.reduce((sum, s) => sum + parseFloat(s.total), 0);
   const monthRevenue = monthSalesList.reduce((sum, s) => sum + parseFloat(s.total), 0);
 
-  // Gross profit = retail revenue - wholesale cost
   let monthGrossProfit = 0;
   let monthWholesaleCost = 0;
   for (const sale of monthSalesList) {
@@ -34,56 +40,42 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     for (const item of items) {
       const product = products.find((p) => p.id === item.productId);
       if (product) {
-        const unitCost = product.unitWholesalePrice
-          ? parseFloat(product.unitWholesalePrice)
-          : parseFloat(product.wholesalePrice);
-        const cost = unitCost * item.quantity;
-        const revenue = item.price * item.quantity;
-        monthGrossProfit += revenue - cost;
-        monthWholesaleCost += cost;
+        const unitCost = product.unitWholesalePrice ? parseFloat(product.unitWholesalePrice) : parseFloat(product.wholesalePrice);
+        monthGrossProfit += (item.price - unitCost) * item.quantity;
+        monthWholesaleCost += unitCost * item.quantity;
       }
     }
     monthGrossProfit -= parseFloat(sale.discount);
   }
 
-  // Daily expenses for today
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   const monthExpenses = expenses.filter((e) => e.month === currentMonth);
   const totalDailyExpenses = monthExpenses.reduce((sum, e) => {
     if (e.type === "one_time") return sum;
-    const daily = e.dailyAmount
-      ? parseFloat(e.dailyAmount)
-      : parseFloat(e.amount) / (e.daysInMonth ?? daysInMonth);
+    const daily = e.dailyAmount ? parseFloat(e.dailyAmount) : parseFloat(e.amount) / (e.daysInMonth ?? daysInMonth);
     return sum + daily;
   }, 0);
-
   const monthTotalExpenses = monthExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
-  // Month advances and penalties
   const monthAdvances = advances.filter((a) => a.month === currentMonth);
   const totalAdvances = monthAdvances.filter((a) => a.type === "advance").reduce((s, a) => s + parseFloat(a.amount), 0);
   const totalPenalties = monthAdvances.filter((a) => a.type === "penalty").reduce((s, a) => s + parseFloat(a.amount), 0);
 
-  // Net profit = gross profit - monthly expenses - advances paid out
   const monthNetProfit = monthGrossProfit - monthTotalExpenses - totalAdvances;
 
-  // Today net profit
   let todayGrossProfit = 0;
   for (const sale of todaySalesList) {
     const items = sale.items as any[];
     for (const item of items) {
       const product = products.find((p) => p.id === item.productId);
       if (product) {
-        const unitCost = product.unitWholesalePrice
-          ? parseFloat(product.unitWholesalePrice)
-          : parseFloat(product.wholesalePrice);
+        const unitCost = product.unitWholesalePrice ? parseFloat(product.unitWholesalePrice) : parseFloat(product.wholesalePrice);
         todayGrossProfit += (item.price - unitCost) * item.quantity;
       }
     }
     todayGrossProfit -= parseFloat(sale.discount);
   }
   const todayNetProfit = todayGrossProfit - totalDailyExpenses;
-
   const totalDebt = customers.reduce((sum, c) => sum + parseFloat(c.totalDebt), 0);
 
   res.json({
@@ -93,9 +85,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     totalProducts: products.length,
     lowStockCount: products.filter((p) => p.shelfStock <= (p.lowStockThreshold ?? 5)).length,
     lowWarehouseCount: products.filter((p) => p.warehouseStock <= (p.lowWarehouseThreshold ?? 2)).length,
-    expiringCount: products.filter(
-      (p) => p.expiryDate && p.expiryDate >= todayDate && p.expiryDate <= soonDate
-    ).length,
+    expiringCount: products.filter((p) => p.expiryDate && p.expiryDate >= todayDate && p.expiryDate <= soonDate).length,
     totalDebt,
     pendingShortages: shortages.filter((s) => s.status === "pending").length,
     monthRevenue,
@@ -110,9 +100,10 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
 });
 
 router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
-  const products = await db.select().from(productsTable);
-  const days: Record<string, { revenue: number; profit: number; netProfit: number; count: number }> = {};
+  const productsSnap = await firestore.collection("products").get();
+  const products = productsSnap.docs.map((d) => ({ ...d.data(), id: parseInt(d.id, 10) }));
 
+  const days: Record<string, { revenue: number; profit: number; netProfit: number; count: number }> = {};
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
@@ -123,21 +114,18 @@ router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
   since.setDate(since.getDate() - 6);
   since.setHours(0, 0, 0, 0);
 
-  const sales = await db.select().from(salesTable);
-  const recent = sales.filter((s) => new Date(s.createdAt) >= since);
+  const salesSnap = await firestore.collection("sales").get();
+  const recent = salesSnap.docs.map((d) => d.data()).filter((s) => tsToDate(s.createdAt) >= since);
 
   for (const sale of recent) {
-    const key = new Date(sale.createdAt).toISOString().slice(0, 10);
-    if (days[key] !== undefined) {
+    const key = tsToDate(sale.createdAt).toISOString().slice(0, 10);
+    if (days[key]) {
       days[key].revenue += parseFloat(sale.total);
       days[key].count += 1;
-      const items = sale.items as any[];
-      for (const item of items) {
+      for (const item of sale.items as any[]) {
         const product = products.find((p) => p.id === item.productId);
         if (product) {
-          const unitCost = product.unitWholesalePrice
-            ? parseFloat(product.unitWholesalePrice)
-            : parseFloat(product.wholesalePrice);
+          const unitCost = product.unitWholesalePrice ? parseFloat(product.unitWholesalePrice) : parseFloat(product.wholesalePrice);
           days[key].profit += (item.price - unitCost) * item.quantity;
         }
       }
@@ -145,10 +133,9 @@ router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
     }
   }
 
-  // Overlay daily expenses
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const expenses = await db.select().from(expensesTable);
-  const monthExpenses = expenses.filter((e) => e.month === currentMonth);
+  const expensesSnap = await firestore.collection("expenses").get();
+  const monthExpenses = expensesSnap.docs.map((d) => d.data()).filter((e) => e.month === currentMonth);
   const totalDailyExpenses = monthExpenses.reduce((sum, e) => {
     if (e.type === "one_time") return sum;
     const daily = e.dailyAmount ? parseFloat(e.dailyAmount) : parseFloat(e.amount) / 30;
@@ -163,20 +150,16 @@ router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
 });
 
 router.get("/dashboard/top-products", async (_req, res): Promise<void> => {
-  const sales = await db.select().from(salesTable);
+  const salesSnap = await firestore.collection("sales").get();
   const totals: Record<number, { productName: string; totalSold: number; revenue: number }> = {};
-
-  for (const sale of sales) {
-    const items = sale.items as any[];
-    for (const item of items) {
-      if (!totals[item.productId]) {
-        totals[item.productId] = { productName: item.productName, totalSold: 0, revenue: 0 };
-      }
+  for (const doc of salesSnap.docs) {
+    const sale = doc.data();
+    for (const item of sale.items as any[]) {
+      if (!totals[item.productId]) totals[item.productId] = { productName: item.productName, totalSold: 0, revenue: 0 };
       totals[item.productId].totalSold += item.quantity;
       totals[item.productId].revenue += item.subtotal;
     }
   }
-
   res.json(
     Object.entries(totals)
       .map(([id, data]) => ({ productId: parseInt(id), ...data }))
@@ -188,76 +171,57 @@ router.get("/dashboard/top-products", async (_req, res): Promise<void> => {
 router.get("/dashboard/expiring-products", async (_req, res): Promise<void> => {
   const today = new Date().toISOString().slice(0, 10);
   const soonDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const products = await db.select().from(productsTable);
+  const snap = await firestore.collection("products").get();
   res.json(
-    products
-      .filter((p) => p.expiryDate && p.expiryDate >= today && p.expiryDate <= soonDate)
-      .map((p) => ({
-        ...p,
-        wholesalePrice: parseFloat(p.wholesalePrice),
-        retailPrice: parseFloat(p.retailPrice),
-        unitWholesalePrice: p.unitWholesalePrice ? parseFloat(p.unitWholesalePrice) : null,
-      }))
+    snap.docs
+      .filter((d) => { const p = d.data(); return p.expiryDate && p.expiryDate >= today && p.expiryDate <= soonDate; })
+      .map((d) => {
+        const p = d.data();
+        return { ...p, id: parseInt(d.id, 10), wholesalePrice: parseFloat(p.wholesalePrice), retailPrice: parseFloat(p.retailPrice), unitWholesalePrice: p.unitWholesalePrice ? parseFloat(p.unitWholesalePrice) : null };
+      })
   );
 });
 
-// Net profit breakdown for a date range (or today)
 router.get("/dashboard/net-profit", async (req, res): Promise<void> => {
   const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
-
-  const [allSales, products, expenses, advances] = await Promise.all([
-    db.select().from(salesTable),
-    db.select().from(productsTable),
-    db.select().from(expensesTable),
-    db.select().from(advancesTable),
+  const [salesSnap, productsSnap, expensesSnap, advancesSnap] = await Promise.all([
+    firestore.collection("sales").get(),
+    firestore.collection("products").get(),
+    firestore.collection("expenses").get(),
+    firestore.collection("advances").get(),
   ]);
 
+  const products = productsSnap.docs.map((d) => ({ ...d.data(), id: parseInt(d.id, 10) }));
   const monthStart = new Date(month + "-01");
   const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59);
-  const monthSales = allSales.filter((s) => {
-    const d = new Date(s.createdAt);
+  const monthSales = salesSnap.docs.map((d) => d.data()).filter((s) => {
+    const d = tsToDate(s.createdAt);
     return d >= monthStart && d <= monthEnd;
   });
 
-  let grossProfit = 0;
-  let revenue = 0;
-  let wholesaleCost = 0;
+  let grossProfit = 0; let revenue = 0; let wholesaleCost = 0;
   for (const sale of monthSales) {
-    const items = sale.items as any[];
-    for (const item of items) {
+    for (const item of sale.items as any[]) {
       const product = products.find((p) => p.id === item.productId);
       if (product) {
-        const unitCost = product.unitWholesalePrice
-          ? parseFloat(product.unitWholesalePrice)
-          : parseFloat(product.wholesalePrice);
+        const unitCost = product.unitWholesalePrice ? parseFloat(product.unitWholesalePrice) : parseFloat(product.wholesalePrice);
         wholesaleCost += unitCost * item.quantity;
         revenue += item.price * item.quantity;
       }
     }
-    grossProfit = revenue - wholesaleCost;
-    grossProfit -= parseFloat(sale.discount);
+    grossProfit = revenue - wholesaleCost - parseFloat(sale.discount);
   }
 
-  const monthExpenses = expenses.filter((e) => e.month === month);
+  const monthExpenses = expensesSnap.docs.map((d) => d.data()).filter((e) => e.month === month);
   const totalExpenses = monthExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-
-  const monthAdvances = advances.filter((a) => a.month === month && a.type === "advance");
+  const monthAdvances = advancesSnap.docs.map((d) => d.data()).filter((a) => a.month === month && a.type === "advance");
   const totalAdvances = monthAdvances.reduce((sum, a) => sum + parseFloat(a.amount), 0);
-
-  const monthPenalties = advances.filter((a) => a.month === month && a.type === "penalty");
+  const monthPenalties = advancesSnap.docs.map((d) => d.data()).filter((a) => a.month === month && a.type === "penalty");
   const totalPenalties = monthPenalties.reduce((sum, a) => sum + parseFloat(a.amount), 0);
 
-  const netProfit = grossProfit - totalExpenses - totalAdvances + totalPenalties;
-
   res.json({
-    month,
-    revenue,
-    wholesaleCost,
-    grossProfit,
-    totalExpenses,
-    totalAdvances,
-    totalPenalties,
-    netProfit,
+    month, revenue, wholesaleCost, grossProfit, totalExpenses, totalAdvances, totalPenalties,
+    netProfit: grossProfit - totalExpenses - totalAdvances + totalPenalties,
     expenseBreakdown: monthExpenses.map((e) => ({ name: e.name, amount: parseFloat(e.amount) })),
   });
 });

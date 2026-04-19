@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { firestore, tsToDate } from "../lib/firebase";
 import { LoginBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -12,20 +11,31 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
   const { email, password } = parsed.data;
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
-  if (!user || user.password !== password) {
+
+  const snap = await firestore.collection("users").where("email", "==", email).limit(1).get();
+  if (snap.empty) {
     res.status(401).json({ error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
     return;
   }
+
+  const doc = snap.docs[0];
+  const user = doc.data();
+  if (user.password !== password) {
+    res.status(401).json({ error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
+    return;
+  }
+
+  const id = parseInt(doc.id, 10);
   const { password: _pw, ...safeUser } = user;
-  const token = Buffer.from(JSON.stringify({ id: user.id, role: user.role })).toString("base64");
-  req.session = req.session ?? {};
-  (req as any).session.userId = user.id;
+  const token = Buffer.from(JSON.stringify({ id, role: user.role })).toString("base64");
   res.cookie("session", token, { httpOnly: true, sameSite: "lax" });
   res.json({
     user: {
       ...safeUser,
-      baseSalary: safeUser.baseSalary ? parseFloat(safeUser.baseSalary) : null,
+      id,
+      createdAt: tsToDate(user.createdAt),
+      updatedAt: tsToDate(user.updatedAt),
+      baseSalary: user.baseSalary != null ? parseFloat(user.baseSalary) : null,
     },
     token,
   });
@@ -44,15 +54,19 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   }
   try {
     const payload = JSON.parse(Buffer.from(token, "base64").toString());
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, payload.id));
-    if (!user) {
+    const snap = await firestore.collection("users").doc(String(payload.id)).get();
+    if (!snap.exists) {
       res.status(401).json({ error: "User not found" });
       return;
     }
+    const user = snap.data()!;
     const { password: _pw, ...safeUser } = user;
     res.json({
       ...safeUser,
-      baseSalary: safeUser.baseSalary ? parseFloat(safeUser.baseSalary) : null,
+      id: parseInt(snap.id, 10),
+      createdAt: tsToDate(user.createdAt),
+      updatedAt: tsToDate(user.updatedAt),
+      baseSalary: user.baseSalary != null ? parseFloat(user.baseSalary) : null,
     });
   } catch {
     res.status(401).json({ error: "Invalid token" });

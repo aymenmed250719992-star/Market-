@@ -1,21 +1,22 @@
 import { Router, type IRouter } from "express";
-import { db, shortagesTable, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { firestore, nextId, tsToDate } from "../lib/firebase";
 import { CreateShortageBody, ResolveShortageBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
-const toShortage = (s: typeof shortagesTable.$inferSelect) => ({
-  ...s,
-  quantity: s.quantity ? parseFloat(s.quantity) : null,
-});
+function toShortage(id: number, data: any) {
+  return {
+    ...data,
+    id,
+    createdAt: tsToDate(data.createdAt),
+    resolvedAt: tsToDate(data.resolvedAt),
+    quantity: data.quantity != null ? parseFloat(data.quantity) : null,
+  };
+}
 
 router.get("/shortages", async (_req, res): Promise<void> => {
-  const shortages = await db
-    .select()
-    .from(shortagesTable)
-    .orderBy(sql`${shortagesTable.createdAt} desc`);
-  res.json(shortages.map(toShortage));
+  const snap = await firestore.collection("shortages").orderBy("createdAt", "desc").get();
+  res.json(snap.docs.map((d) => toShortage(parseInt(d.id, 10), d.data())));
 });
 
 router.post("/shortages", async (req, res): Promise<void> => {
@@ -32,29 +33,38 @@ router.post("/shortages", async (req, res): Promise<void> => {
     try {
       const payload = JSON.parse(Buffer.from(token, "base64").toString());
       reportedById = payload.id;
-      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, payload.id));
-      if (user) reportedByName = user.name;
+      const userSnap = await firestore.collection("users").doc(String(payload.id)).get();
+      if (userSnap.exists) reportedByName = userSnap.data()!.name;
     } catch {}
   }
 
-  const [shortage] = await db
-    .insert(shortagesTable)
-    .values({
-      ...parsed.data,
-      reportedById,
-      reportedByName,
-      quantity: parsed.data.quantity?.toString() ?? null,
-    })
-    .returning();
-  res.status(201).json(toShortage(shortage));
+  const id = await nextId("shortages");
+  const now = new Date();
+  const data = {
+    ...parsed.data,
+    reportedById,
+    reportedByName,
+    quantity: parsed.data.quantity?.toString() ?? null,
+    status: "pending",
+    resolvedById: null,
+    resolvedAt: null,
+    createdAt: now,
+  };
+  await firestore.collection("shortages").doc(String(id)).set(data);
+  res.status(201).json(toShortage(id, data));
 });
 
 router.patch("/shortages/:id/resolve", async (req, res): Promise<void> => {
-  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const id = parseInt(raw, 10);
+  const id = req.params.id as string;
   const parsed = ResolveShortageBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const snap = await firestore.collection("shortages").doc(id).get();
+  if (!snap.exists) {
+    res.status(404).json({ error: "Report not found" });
     return;
   }
 
@@ -67,20 +77,13 @@ router.patch("/shortages/:id/resolve", async (req, res): Promise<void> => {
     } catch {}
   }
 
-  const [shortage] = await db
-    .update(shortagesTable)
-    .set({
-      status: parsed.data.status,
-      resolvedById,
-      resolvedAt: new Date(),
-    })
-    .where(eq(shortagesTable.id, id))
-    .returning();
-  if (!shortage) {
-    res.status(404).json({ error: "Report not found" });
-    return;
-  }
-  res.json(toShortage(shortage));
+  await firestore.collection("shortages").doc(id).update({
+    status: parsed.data.status,
+    resolvedById,
+    resolvedAt: new Date(),
+  });
+  const updated = await firestore.collection("shortages").doc(id).get();
+  res.json(toShortage(parseInt(updated.id, 10), updated.data()!));
 });
 
 export default router;

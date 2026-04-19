@@ -1,18 +1,22 @@
 import { Router, type IRouter } from "express";
-import { db, shiftsTable, salesTable, usersTable } from "@workspace/db";
-import { eq, sql, and, gte } from "drizzle-orm";
+import { firestore, nextId, tsToDate } from "../lib/firebase";
 import { z } from "zod";
 
 const router: IRouter = Router();
 
-const toShift = (s: typeof shiftsTable.$inferSelect) => ({
-  ...s,
-  startingFloat: parseFloat(s.startingFloat),
-  closingCash: s.closingCash ? parseFloat(s.closingCash) : null,
-  systemTotal: parseFloat(s.systemTotal),
-  totalSales: parseFloat(s.totalSales),
-  deficit: s.deficit ? parseFloat(s.deficit) : null,
-});
+function toShift(id: number, data: any) {
+  return {
+    ...data,
+    id,
+    openedAt: tsToDate(data.openedAt),
+    closedAt: tsToDate(data.closedAt),
+    startingFloat: parseFloat(data.startingFloat),
+    closingCash: data.closingCash != null ? parseFloat(data.closingCash) : null,
+    systemTotal: parseFloat(data.systemTotal),
+    totalSales: parseFloat(data.totalSales),
+    deficit: data.deficit != null ? parseFloat(data.deficit) : null,
+  };
+}
 
 const OpenShiftBody = z.object({
   employeeBarcode: z.string().min(1),
@@ -25,7 +29,6 @@ const CloseShiftBody = z.object({
   notes: z.string().optional(),
 });
 
-// Open shift by scanning employee barcode
 router.post("/shifts/open", async (req, res): Promise<void> => {
   const parsed = OpenShiftBody.safeParse(req.body);
   if (!parsed.success) {
@@ -34,48 +37,53 @@ router.post("/shifts/open", async (req, res): Promise<void> => {
   }
 
   const { employeeBarcode, startingFloat } = parsed.data;
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.employeeBarcode, employeeBarcode));
-
-  if (!user) {
+  const userSnap = await firestore.collection("users").where("employeeBarcode", "==", employeeBarcode).limit(1).get();
+  if (userSnap.empty) {
     res.status(404).json({ error: "الباركود غير معروف — لم يتم التعرف على الموظف" });
     return;
   }
+  const userDoc = userSnap.docs[0];
+  const user = userDoc.data();
+  const userId = parseInt(userDoc.id, 10);
 
-  // Check if cashier already has an open shift
-  const existingShifts = await db
-    .select()
-    .from(shiftsTable)
-    .where(and(eq(shiftsTable.cashierId, user.id), eq(shiftsTable.status, "open")));
+  const existingSnap = await firestore.collection("shifts")
+    .where("cashierId", "==", userId)
+    .where("status", "==", "open")
+    .limit(1)
+    .get();
 
-  if (existingShifts.length > 0) {
+  if (!existingSnap.empty) {
+    const existingShift = existingSnap.docs[0];
     res.status(409).json({
       error: "يوجد وردية مفتوحة مسبقاً لهذا الموظف",
-      shift: toShift(existingShifts[0]),
-      user: { id: user.id, name: user.name, role: user.role },
+      shift: toShift(parseInt(existingShift.id, 10), existingShift.data()),
+      user: { id: userId, name: user.name, role: user.role },
     });
     return;
   }
 
-  const [shift] = await db
-    .insert(shiftsTable)
-    .values({
-      cashierId: user.id,
-      cashierName: user.name,
-      startingFloat: startingFloat.toString(),
-      status: "open",
-    })
-    .returning();
-
+  const id = await nextId("shifts");
+  const now = new Date();
+  const data = {
+    cashierId: userId,
+    cashierName: user.name,
+    startingFloat: startingFloat.toString(),
+    systemTotal: "0",
+    totalSales: "0",
+    closingCash: null,
+    deficit: null,
+    notes: null,
+    status: "open",
+    openedAt: now,
+    closedAt: null,
+  };
+  await firestore.collection("shifts").doc(String(id)).set(data);
   res.status(201).json({
-    shift: toShift(shift),
-    user: { id: user.id, name: user.name, role: user.role },
+    shift: toShift(id, data),
+    user: { id: userId, name: user.name, role: user.role },
   });
 });
 
-// Close shift with cash reconciliation
 router.post("/shifts/close", async (req, res): Promise<void> => {
   const parsed = CloseShiftBody.safeParse(req.body);
   if (!parsed.success) {
@@ -84,82 +92,70 @@ router.post("/shifts/close", async (req, res): Promise<void> => {
   }
 
   const { shiftId, closingCash, notes } = parsed.data;
-  const [shift] = await db.select().from(shiftsTable).where(eq(shiftsTable.id, shiftId));
-
-  if (!shift) {
+  const shiftSnap = await firestore.collection("shifts").doc(String(shiftId)).get();
+  if (!shiftSnap.exists) {
     res.status(404).json({ error: "الوردية غير موجودة" });
     return;
   }
+  const shift = shiftSnap.data()!;
   if (shift.status === "closed") {
     res.status(409).json({ error: "الوردية مغلقة مسبقاً" });
     return;
   }
 
-  // Sum all cash sales during this shift
-  const allSales = await db.select().from(salesTable);
-  const shiftStart = new Date(shift.openedAt);
-  const cashSales = allSales.filter(
-    (s) =>
-      s.cashierId === shift.cashierId &&
-      new Date(s.createdAt) >= shiftStart &&
-      s.paymentMethod === "cash"
-  );
+  const salesSnap = await firestore.collection("sales").get();
+  const shiftStart = tsToDate(shift.openedAt);
+  const allSales = salesSnap.docs.map((d) => d.data());
 
+  const cashSales = allSales.filter(
+    (s) => s.cashierId === shift.cashierId && tsToDate(s.createdAt) >= shiftStart && s.paymentMethod === "cash"
+  );
   const systemTotal = cashSales.reduce((sum, s) => sum + parseFloat(s.total), 0);
   const totalSales = allSales
-    .filter((s) => s.cashierId === shift.cashierId && new Date(s.createdAt) >= shiftStart)
+    .filter((s) => s.cashierId === shift.cashierId && tsToDate(s.createdAt) >= shiftStart)
     .reduce((sum, s) => sum + parseFloat(s.total), 0);
 
-  // deficit = closingCash - (startingFloat + systemTotal)
   const expected = parseFloat(shift.startingFloat) + systemTotal;
   const deficit = closingCash - expected;
 
-  const [updated] = await db
-    .update(shiftsTable)
-    .set({
-      closingCash: closingCash.toString(),
-      systemTotal: systemTotal.toString(),
-      totalSales: totalSales.toString(),
-      deficit: deficit.toString(),
-      notes: notes ?? null,
-      status: "closed",
-      closedAt: new Date(),
-    })
-    .where(eq(shiftsTable.id, shiftId))
-    .returning();
-
-  res.json(toShift(updated));
+  await firestore.collection("shifts").doc(String(shiftId)).update({
+    closingCash: closingCash.toString(),
+    systemTotal: systemTotal.toString(),
+    totalSales: totalSales.toString(),
+    deficit: deficit.toString(),
+    notes: notes ?? null,
+    status: "closed",
+    closedAt: new Date(),
+  });
+  const updated = await firestore.collection("shifts").doc(String(shiftId)).get();
+  res.json(toShift(parseInt(updated.id, 10), updated.data()!));
 });
 
-// List all shifts
 router.get("/shifts", async (req, res): Promise<void> => {
+  const snap = await firestore.collection("shifts").orderBy("openedAt", "desc").get();
+  let shifts = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
+
   const cashierId = req.query.cashierId ? parseInt(req.query.cashierId as string) : undefined;
   const status = req.query.status as string | undefined;
+  if (cashierId) shifts = shifts.filter(({ raw }) => raw.cashierId === cashierId);
+  if (status) shifts = shifts.filter(({ raw }) => raw.status === status);
 
-  let shifts = await db
-    .select()
-    .from(shiftsTable)
-    .orderBy(sql`${shiftsTable.openedAt} desc`);
-
-  if (cashierId) shifts = shifts.filter((s) => s.cashierId === cashierId);
-  if (status) shifts = shifts.filter((s) => s.status === status);
-
-  res.json(shifts.map(toShift));
+  res.json(shifts.map(({ raw, id }) => toShift(id, raw)));
 });
 
-// Get active shift for a cashier
 router.get("/shifts/active/:cashierId", async (req, res): Promise<void> => {
   const cashierId = parseInt(req.params.cashierId as string, 10);
-  const [shift] = await db
-    .select()
-    .from(shiftsTable)
-    .where(and(eq(shiftsTable.cashierId, cashierId), eq(shiftsTable.status, "open")));
-
-  if (!shift) {
+  const snap = await firestore.collection("shifts")
+    .where("cashierId", "==", cashierId)
+    .where("status", "==", "open")
+    .limit(1)
+    .get();
+  if (snap.empty) {
     res.status(404).json({ error: "لا توجد وردية مفتوحة" });
     return;
   }
-  res.json(toShift(shift));
+  const doc = snap.docs[0];
+  res.json(toShift(parseInt(doc.id, 10), doc.data()));
 });
 
 export default router;

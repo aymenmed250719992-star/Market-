@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, customersTable, onlineOrdersTable, productsTable, salesTable, usersTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { firestore, nextId, tsToDate } from "../lib/firebase";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -25,16 +24,21 @@ const updateOrderSchema = z.object({
   notes: z.string().nullable().optional(),
 });
 
-const toOrder = (order: typeof onlineOrdersTable.$inferSelect) => ({
-  ...order,
-  subtotal: parseFloat(order.subtotal),
-  deliveryFee: parseFloat(order.deliveryFee),
-  total: parseFloat(order.total),
-});
+function toOrder(id: number, data: any) {
+  return {
+    ...data,
+    id,
+    createdAt: tsToDate(data.createdAt),
+    updatedAt: tsToDate(data.updatedAt),
+    subtotal: parseFloat(data.subtotal),
+    deliveryFee: parseFloat(data.deliveryFee),
+    total: parseFloat(data.total),
+  };
+}
 
 router.get("/online-orders", async (_req, res): Promise<void> => {
-  const orders = await db.select().from(onlineOrdersTable).orderBy(desc(onlineOrdersTable.createdAt));
-  res.json(orders.map(toOrder));
+  const snap = await firestore.collection("online_orders").orderBy("createdAt", "desc").get();
+  res.json(snap.docs.map((d) => toOrder(parseInt(d.id, 10), d.data())));
 });
 
 router.get("/online-orders/lookup", async (req, res): Promise<void> => {
@@ -44,21 +48,42 @@ router.get("/online-orders/lookup", async (req, res): Promise<void> => {
     return;
   }
 
-  const [customer] = await db.select().from(customersTable).where(eq(customersTable.phone, phone));
-  const orders = await db.select().from(onlineOrdersTable).where(eq(onlineOrdersTable.phone, phone)).orderBy(desc(onlineOrdersTable.createdAt));
-  const sales = customer
-    ? await db.select().from(salesTable).where(eq(salesTable.customerId, customer.id)).orderBy(desc(salesTable.createdAt))
-    : [];
+  const [customerSnap, ordersSnap] = await Promise.all([
+    firestore.collection("customers").where("phone", "==", phone).limit(1).get(),
+    firestore.collection("online_orders").where("phone", "==", phone).orderBy("createdAt", "desc").get(),
+  ]);
+
+  const customer = !customerSnap.empty ? customerSnap.docs[0] : null;
+  let invoices: any[] = [];
+  if (customer) {
+    const salesSnap = await firestore.collection("sales")
+      .where("customerId", "==", parseInt(customer.id, 10))
+      .orderBy("createdAt", "desc")
+      .get();
+    invoices = salesSnap.docs.map((d) => {
+      const s = d.data();
+      return {
+        ...s,
+        id: parseInt(d.id, 10),
+        createdAt: tsToDate(s.createdAt),
+        subtotal: parseFloat(s.subtotal),
+        discount: parseFloat(s.discount),
+        total: parseFloat(s.total),
+      };
+    });
+  }
 
   res.json({
-    customer: customer ? { ...customer, creditLimit: parseFloat(customer.creditLimit), totalDebt: parseFloat(customer.totalDebt) } : null,
-    orders: orders.map(toOrder),
-    invoices: sales.map((sale) => ({
-      ...sale,
-      subtotal: parseFloat(sale.subtotal),
-      discount: parseFloat(sale.discount),
-      total: parseFloat(sale.total),
-    })),
+    customer: customer ? {
+      ...customer.data(),
+      id: parseInt(customer.id, 10),
+      createdAt: tsToDate(customer.data().createdAt),
+      updatedAt: tsToDate(customer.data().updatedAt),
+      creditLimit: parseFloat(customer.data().creditLimit),
+      totalDebt: parseFloat(customer.data().totalDebt),
+    } : null,
+    orders: ordersSnap.docs.map((d) => toOrder(parseInt(d.id, 10), d.data())),
+    invoices,
   });
 });
 
@@ -70,16 +95,19 @@ router.post("/online-orders", async (req, res): Promise<void> => {
   }
 
   const data = parsed.data;
-  const [customer] = await db.select().from(customersTable).where(eq(customersTable.phone, data.phone));
+  const customerSnap = await firestore.collection("customers").where("phone", "==", data.phone).limit(1).get();
+  const customer = !customerSnap.empty ? customerSnap.docs[0] : null;
+
   const items = [];
   let subtotal = 0;
 
   for (const item of data.items) {
-    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
-    if (!product) {
+    const productSnap = await firestore.collection("products").doc(String(item.productId)).get();
+    if (!productSnap.exists) {
       res.status(400).json({ error: "يوجد منتج غير متوفر في الطلب" });
       return;
     }
+    const product = productSnap.data()!;
     if (product.stock < item.quantity) {
       res.status(400).json({ error: `الكمية غير كافية من ${product.name}` });
       return;
@@ -87,20 +115,15 @@ router.post("/online-orders", async (req, res): Promise<void> => {
     const price = parseFloat(product.retailPrice);
     const lineTotal = price * item.quantity;
     subtotal += lineTotal;
-    items.push({
-      productId: product.id,
-      productName: product.name,
-      price,
-      quantity: item.quantity,
-      subtotal: lineTotal,
-    });
+    items.push({ productId: item.productId, productName: product.name, price, quantity: item.quantity, subtotal: lineTotal });
   }
 
   const deliveryFee = data.paymentMethod === "store_pickup" ? 0 : 200;
   const total = subtotal + deliveryFee;
-
-  const [order] = await db.insert(onlineOrdersTable).values({
-    customerId: customer?.id ?? null,
+  const id = await nextId("online_orders");
+  const now = new Date();
+  const orderData = {
+    customerId: customer ? parseInt(customer.id, 10) : null,
     customerName: data.customerName,
     phone: data.phone,
     address: data.address ?? null,
@@ -111,20 +134,30 @@ router.post("/online-orders", async (req, res): Promise<void> => {
     total: total.toString(),
     paymentMethod: data.paymentMethod,
     status: "pending",
-  }).returning();
-
-  res.status(201).json(toOrder(order));
+    assignedDistributorId: null,
+    assignedDistributorName: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await firestore.collection("online_orders").doc(String(id)).set(orderData);
+  res.status(201).json(toOrder(id, orderData));
 });
 
 router.patch("/online-orders/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
+  const id = req.params.id as string;
   const parsed = updateOrderSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "بيانات التحديث غير صحيحة" });
     return;
   }
 
-  const updates: Record<string, unknown> = {};
+  const snap = await firestore.collection("online_orders").doc(id).get();
+  if (!snap.exists) {
+    res.status(404).json({ error: "الطلب غير موجود" });
+    return;
+  }
+
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (parsed.data.status) updates.status = parsed.data.status;
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
 
@@ -132,17 +165,14 @@ router.patch("/online-orders/:id", async (req, res): Promise<void> => {
     updates.assignedDistributorId = parsed.data.assignedDistributorId;
     updates.assignedDistributorName = null;
     if (parsed.data.assignedDistributorId) {
-      const [distributor] = await db.select().from(usersTable).where(eq(usersTable.id, parsed.data.assignedDistributorId));
-      if (distributor) updates.assignedDistributorName = distributor.name;
+      const distSnap = await firestore.collection("users").doc(String(parsed.data.assignedDistributorId)).get();
+      if (distSnap.exists) updates.assignedDistributorName = distSnap.data()!.name;
     }
   }
 
-  const [order] = await db.update(onlineOrdersTable).set(updates).where(eq(onlineOrdersTable.id, id)).returning();
-  if (!order) {
-    res.status(404).json({ error: "الطلب غير موجود" });
-    return;
-  }
-  res.json(toOrder(order));
+  await firestore.collection("online_orders").doc(id).update(updates);
+  const updated = await firestore.collection("online_orders").doc(id).get();
+  res.json(toOrder(parseInt(updated.id, 10), updated.data()!));
 });
 
 export default router;

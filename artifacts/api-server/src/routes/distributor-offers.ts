@@ -1,6 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { db, distributorOffersTable, usersTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { firestore, nextId, tsToDate } from "../lib/firebase";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -23,25 +22,32 @@ async function getCurrentUser(req: Request) {
   if (!token) return null;
   try {
     const payload = JSON.parse(Buffer.from(token, "base64").toString());
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, payload.id));
-    return user ?? null;
+    const snap = await firestore.collection("users").doc(String(payload.id)).get();
+    if (!snap.exists) return null;
+    return { ...snap.data()!, id: parseInt(snap.id, 10) };
   } catch {
     return null;
   }
 }
 
-const toOffer = (offer: typeof distributorOffersTable.$inferSelect) => ({
-  ...offer,
-  wholesalePrice: parseFloat(offer.wholesalePrice),
-});
+function toOffer(id: number, data: any) {
+  return {
+    ...data,
+    id,
+    createdAt: tsToDate(data.createdAt),
+    updatedAt: tsToDate(data.updatedAt),
+    wholesalePrice: parseFloat(data.wholesalePrice),
+  };
+}
 
 router.get("/distributor-offers", async (req, res): Promise<void> => {
   const user = await getCurrentUser(req);
-  let offers = await db.select().from(distributorOffersTable).orderBy(desc(distributorOffersTable.createdAt));
+  const snap = await firestore.collection("distributor_offers").orderBy("createdAt", "desc").get();
+  let offers = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
   if (req.query.mine === "true" && user) {
-    offers = offers.filter((offer) => offer.distributorId === user.id);
+    offers = offers.filter(({ raw }) => raw.distributorId === user.id);
   }
-  res.json(offers.map(toOffer));
+  res.json(offers.map(({ raw, id }) => toOffer(id, raw)));
 });
 
 router.post("/distributor-offers", async (req, res): Promise<void> => {
@@ -57,14 +63,18 @@ router.post("/distributor-offers", async (req, res): Promise<void> => {
     return;
   }
 
-  const [offer] = await db.insert(distributorOffersTable).values({
+  const id = await nextId("distributor_offers");
+  const now = new Date();
+  const data = {
     ...parsed.data,
     distributorId: user.id,
     distributorName: user.name,
     wholesalePrice: parsed.data.wholesalePrice.toString(),
-  }).returning();
-
-  res.status(201).json(toOffer(offer));
+    createdAt: now,
+    updatedAt: now,
+  };
+  await firestore.collection("distributor_offers").doc(String(id)).set(data);
+  res.status(201).json(toOffer(id, data));
 });
 
 router.patch("/distributor-offers/:id", async (req, res): Promise<void> => {
@@ -74,12 +84,13 @@ router.patch("/distributor-offers/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const id = parseInt(req.params.id as string, 10);
-  const [existing] = await db.select().from(distributorOffersTable).where(eq(distributorOffersTable.id, id));
-  if (!existing) {
+  const id = req.params.id as string;
+  const snap = await firestore.collection("distributor_offers").doc(id).get();
+  if (!snap.exists) {
     res.status(404).json({ error: "العرض غير موجود" });
     return;
   }
+  const existing = snap.data()!;
   if (user.role !== "admin" && existing.distributorId !== user.id) {
     res.status(403).json({ error: "غير مسموح بتعديل هذا العرض" });
     return;
@@ -91,11 +102,12 @@ router.patch("/distributor-offers/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const updates: Record<string, unknown> = { ...parsed.data };
+  const updates: Record<string, unknown> = { ...parsed.data, updatedAt: new Date() };
   if (parsed.data.wholesalePrice !== undefined) updates.wholesalePrice = parsed.data.wholesalePrice.toString();
 
-  const [offer] = await db.update(distributorOffersTable).set(updates).where(eq(distributorOffersTable.id, id)).returning();
-  res.json(toOffer(offer));
+  await firestore.collection("distributor_offers").doc(id).update(updates);
+  const updated = await firestore.collection("distributor_offers").doc(id).get();
+  res.json(toOffer(parseInt(updated.id, 10), updated.data()!));
 });
 
 export default router;

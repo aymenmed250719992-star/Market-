@@ -1,17 +1,27 @@
 import { Router, type IRouter } from "express";
-import { db, productsTable } from "@workspace/db";
-import { eq, or, sql } from "drizzle-orm";
+import { firestore, nextId, tsToDate } from "../lib/firebase";
 import { z } from "zod";
 
 const router: IRouter = Router();
 
-const toProduct = (p: typeof productsTable.$inferSelect) => ({
-  ...p,
-  wholesalePrice: parseFloat(p.wholesalePrice),
-  retailPrice: parseFloat(p.retailPrice),
-  unitWholesalePrice: p.unitWholesalePrice ? parseFloat(p.unitWholesalePrice) : null,
-  profitMargin: p.profitMargin ? parseFloat(p.profitMargin) : 15,
-});
+function toProduct(id: number, data: any) {
+  return {
+    ...data,
+    id,
+    createdAt: tsToDate(data.createdAt),
+    updatedAt: tsToDate(data.updatedAt),
+    wholesalePrice: parseFloat(data.wholesalePrice),
+    retailPrice: parseFloat(data.retailPrice),
+    unitWholesalePrice: data.unitWholesalePrice != null ? parseFloat(data.unitWholesalePrice) : null,
+    profitMargin: data.profitMargin != null ? parseFloat(data.profitMargin) : 15,
+  };
+}
+
+function calcRetailFromCarton(cartonWholesale: number, unitsPerCarton: number, margin: number) {
+  const unitWholesale = cartonWholesale / unitsPerCarton;
+  const retail = Math.ceil(unitWholesale * (1 + margin / 100));
+  return { unitWholesale, retail };
+}
 
 const CreateProductBody = z.object({
   barcode: z.string().optional(),
@@ -36,43 +46,30 @@ const CreateProductBody = z.object({
 
 const UpdateProductBody = CreateProductBody.partial();
 
-// Auto-calculate retail price from carton wholesale price + profit margin
-function calcRetailFromCarton(cartonWholesale: number, unitsPerCarton: number, margin: number): {
-  unitWholesale: number;
-  retail: number;
-} {
-  const unitWholesale = cartonWholesale / unitsPerCarton;
-  const retail = Math.ceil(unitWholesale * (1 + margin / 100));
-  return { unitWholesale, retail };
-}
-
 router.get("/products", async (req, res): Promise<void> => {
   const today = new Date().toISOString().slice(0, 10);
   const soonDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  let products = await db.select().from(productsTable).orderBy(productsTable.name);
+  const snap = await firestore.collection("products").orderBy("name").get();
+  let products = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
 
   const { search, category, lowStock, expiringSoon } = req.query as Record<string, string | undefined>;
-
   if (search) {
     const s = search.toLowerCase();
-    products = products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(s) ||
-        p.category.toLowerCase().includes(s) ||
-        (p.barcode && p.barcode.includes(s)) ||
-        (p.cartonBarcode && p.cartonBarcode.includes(s))
+    products = products.filter(({ raw: p }) =>
+      p.name.toLowerCase().includes(s) ||
+      p.category.toLowerCase().includes(s) ||
+      (p.barcode && p.barcode.includes(s)) ||
+      (p.cartonBarcode && p.cartonBarcode.includes(s))
     );
   }
-  if (category) products = products.filter((p) => p.category === category);
-  if (lowStock === "true") products = products.filter((p) => p.shelfStock <= (p.lowStockThreshold ?? 5));
+  if (category) products = products.filter(({ raw: p }) => p.category === category);
+  if (lowStock === "true") products = products.filter(({ raw: p }) => p.shelfStock <= (p.lowStockThreshold ?? 5));
   if (expiringSoon === "true") {
-    products = products.filter(
-      (p) => p.expiryDate && p.expiryDate >= today && p.expiryDate <= soonDate
-    );
+    products = products.filter(({ raw: p }) => p.expiryDate && p.expiryDate >= today && p.expiryDate <= soonDate);
   }
 
-  res.json(products.map(toProduct));
+  res.json(products.map(({ raw, id }) => toProduct(id, raw)));
 });
 
 router.post("/products", async (req, res): Promise<void> => {
@@ -81,75 +78,68 @@ router.post("/products", async (req, res): Promise<void> => {
     res.status(400).json({ error: "بيانات غير صحيحة" });
     return;
   }
-
   const d = parsed.data;
   let { wholesalePrice, retailPrice, unitWholesalePrice, profitMargin } = d;
-
-  // Auto-calc unit price & retail if carton data provided
   if (d.unitsPerCarton && d.unitsPerCarton > 0) {
     const calc = calcRetailFromCarton(wholesalePrice, d.unitsPerCarton, profitMargin ?? 15);
     unitWholesalePrice = unitWholesalePrice ?? calc.unitWholesale;
     retailPrice = retailPrice ?? calc.retail;
   }
-
-  const [product] = await db
-    .insert(productsTable)
-    .values({
-      ...d,
-      wholesalePrice: wholesalePrice.toString(),
-      retailPrice: retailPrice.toString(),
-      unitWholesalePrice: unitWholesalePrice?.toString() ?? null,
-      profitMargin: (profitMargin ?? 15).toString(),
-    })
-    .returning();
-  res.status(201).json(toProduct(product));
+  const id = await nextId("products");
+  const now = new Date();
+  const data = {
+    ...d,
+    wholesalePrice: wholesalePrice.toString(),
+    retailPrice: retailPrice.toString(),
+    unitWholesalePrice: unitWholesalePrice?.toString() ?? null,
+    profitMargin: (profitMargin ?? 15).toString(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await firestore.collection("products").doc(String(id)).set(data);
+  res.status(201).json(toProduct(id, data));
 });
 
-// Barcode lookup — tries both unit and carton barcode
 router.get("/products/barcode/:barcode", async (req, res): Promise<void> => {
-  const barcode = Array.isArray(req.params.barcode) ? req.params.barcode[0] : req.params.barcode;
-  const products = await db
-    .select()
-    .from(productsTable)
-    .where(or(eq(productsTable.barcode, barcode), eq(productsTable.cartonBarcode, barcode)));
-
-  if (!products.length) {
+  const barcode = req.params.barcode as string;
+  const [byUnit, byCarton] = await Promise.all([
+    firestore.collection("products").where("barcode", "==", barcode).limit(1).get(),
+    firestore.collection("products").where("cartonBarcode", "==", barcode).limit(1).get(),
+  ]);
+  const doc = !byUnit.empty ? byUnit.docs[0] : !byCarton.empty ? byCarton.docs[0] : null;
+  if (!doc) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;
   }
-
-  const product = products[0];
-  const isCarton = product.cartonBarcode === barcode && product.barcode !== barcode;
-  res.json({ ...toProduct(product), isCartonScan: isCarton });
+  const p = doc.data();
+  const isCarton = p.cartonBarcode === barcode && p.barcode !== barcode;
+  res.json({ ...toProduct(parseInt(doc.id, 10), p), isCartonScan: isCarton });
 });
 
 router.get("/products/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!product) {
+  const snap = await firestore.collection("products").doc(req.params.id as string).get();
+  if (!snap.exists) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;
   }
-  res.json(toProduct(product));
+  res.json(toProduct(parseInt(snap.id, 10), snap.data()!));
 });
 
 router.patch("/products/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
+  const id = req.params.id as string;
   const parsed = UpdateProductBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "بيانات غير صحيحة" });
     return;
   }
-
-  const d = parsed.data;
-  const updates: Record<string, unknown> = {};
-
-  // Get existing product to compute auto-pricing
-  const [existing] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!existing) {
+  const snap = await firestore.collection("products").doc(id).get();
+  if (!snap.exists) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;
   }
+  const existing = snap.data()!;
+  const d = parsed.data;
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
 
   if (d.name != null) updates.name = d.name;
   if (d.barcode !== undefined) updates.barcode = d.barcode;
@@ -166,7 +156,6 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
   if (d.lowStockThreshold != null) updates.lowStockThreshold = d.lowStockThreshold;
   if (d.lowWarehouseThreshold != null) updates.lowWarehouseThreshold = d.lowWarehouseThreshold;
 
-  // Smart pricing: if wholesale changes, recalculate retail based on margin
   const newWholesale = d.wholesalePrice ?? parseFloat(existing.wholesalePrice);
   const newMargin = d.profitMargin ?? parseFloat(existing.profitMargin ?? "15");
   const unitsPerCarton = d.unitsPerCarton ?? existing.unitsPerCarton;
@@ -174,72 +163,57 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
   if (d.wholesalePrice != null || d.profitMargin != null) {
     updates.wholesalePrice = newWholesale.toString();
     updates.profitMargin = newMargin.toString();
-
     if (unitsPerCarton && unitsPerCarton > 0) {
-      // Auto-recalculate unit price and retail
       const calc = calcRetailFromCarton(newWholesale, unitsPerCarton, newMargin);
       updates.unitWholesalePrice = calc.unitWholesale.toString();
-      // Only auto-update retail if retailPrice not explicitly provided
-      if (d.retailPrice == null) {
-        updates.retailPrice = calc.retail.toString();
-      }
+      if (d.retailPrice == null) updates.retailPrice = calc.retail.toString();
     }
   }
-
   if (d.retailPrice != null) updates.retailPrice = d.retailPrice.toString();
   if (d.unitWholesalePrice != null) updates.unitWholesalePrice = d.unitWholesalePrice.toString();
 
-  const [product] = await db
-    .update(productsTable)
-    .set(updates)
-    .where(eq(productsTable.id, id))
-    .returning();
-
-  res.json(toProduct(product));
+  await firestore.collection("products").doc(id).update(updates);
+  const updated = await firestore.collection("products").doc(id).get();
+  res.json(toProduct(parseInt(updated.id, 10), updated.data()!));
 });
 
-// Move stock from warehouse to shelf (carton transfer)
 router.post("/products/:id/restock", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
+  const id = req.params.id as string;
   const { cartonsToMove } = req.body;
-
   if (typeof cartonsToMove !== "number" || cartonsToMove <= 0) {
     res.status(400).json({ error: "كمية الكراتين غير صحيحة" });
     return;
   }
-
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, id));
-  if (!product) {
+  const snap = await firestore.collection("products").doc(id).get();
+  if (!snap.exists) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;
   }
-
+  const product = snap.data()!;
   const unitsPerCarton = product.unitsPerCarton ?? product.cartonSize ?? 1;
   if (product.warehouseStock < cartonsToMove) {
     res.status(400).json({ error: "لا يوجد كافة الكراتين في المستودع" });
     return;
   }
-
-  const [updated] = await db
-    .update(productsTable)
-    .set({
-      warehouseStock: product.warehouseStock - cartonsToMove,
-      shelfStock: product.shelfStock + cartonsToMove * unitsPerCarton,
-      stock: product.stock + cartonsToMove * unitsPerCarton,
-    })
-    .where(eq(productsTable.id, id))
-    .returning();
-
-  res.json(toProduct(updated));
+  const updates = {
+    warehouseStock: product.warehouseStock - cartonsToMove,
+    shelfStock: product.shelfStock + cartonsToMove * unitsPerCarton,
+    stock: product.stock + cartonsToMove * unitsPerCarton,
+    updatedAt: new Date(),
+  };
+  await firestore.collection("products").doc(id).update(updates);
+  const updated = await firestore.collection("products").doc(id).get();
+  res.json(toProduct(parseInt(updated.id, 10), updated.data()!));
 });
 
 router.delete("/products/:id", async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id as string, 10);
-  const [product] = await db.delete(productsTable).where(eq(productsTable.id, id)).returning();
-  if (!product) {
+  const id = req.params.id as string;
+  const snap = await firestore.collection("products").doc(id).get();
+  if (!snap.exists) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;
   }
+  await firestore.collection("products").doc(id).delete();
   res.sendStatus(204);
 });
 
