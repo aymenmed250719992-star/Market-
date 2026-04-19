@@ -1,0 +1,1209 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: Algerian Supermarket Management System API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management (Admin only)
+  - name: products
+    description: Product inventory management
+  - name: sales
+    description: Sales and POS transactions
+  - name: customers
+    description: Customer and debt (Karni) management
+  - name: shortages
+    description: Shortage and damage reports
+  - name: salaries
+    description: Salary management (Admin only)
+  - name: dashboard
+    description: Dashboard analytics
+  - name: ai
+    description: AI inventory assistant
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all employees (Admin only)
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create employee (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get user by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update employee (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete employee (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: lowStock
+          in: query
+          schema:
+            type: boolean
+        - name: expiringSoon
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Products list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create product (Buyer/Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductBody"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get product by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update product (Buyer/Admin)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductBody"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete product (Admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /products/barcode/{barcode}:
+    get:
+      operationId: getProductByBarcode
+      tags: [products]
+      summary: Get product by barcode
+      parameters:
+        - name: barcode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+
+  /sales:
+    get:
+      operationId: listSales
+      tags: [sales]
+      summary: List sales
+      parameters:
+        - name: cashierId
+          in: query
+          schema:
+            type: integer
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Sales list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Sale"
+    post:
+      operationId: createSale
+      tags: [sales]
+      summary: Create sale (Cashier)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSaleBody"
+      responses:
+        "201":
+          description: Sale created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sale"
+
+  /sales/{id}:
+    get:
+      operationId: getSale
+      tags: [sales]
+      summary: Get sale by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sale
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sale"
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List customers with debt info
+      responses:
+        "200":
+          description: Customers list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerBody"
+      responses:
+        "201":
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerBody"
+      responses:
+        "200":
+          description: Updated customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}/pay-debt:
+    post:
+      operationId: payCustomerDebt
+      tags: [customers]
+      summary: Record debt payment (Karni)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PayDebtBody"
+      responses:
+        "200":
+          description: Debt updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /shortages:
+    get:
+      operationId: listShortages
+      tags: [shortages]
+      summary: List shortage/damage reports
+      responses:
+        "200":
+          description: Shortage reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShortageReport"
+    post:
+      operationId: createShortage
+      tags: [shortages]
+      summary: Report shortage or damage (Worker)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShortageBody"
+      responses:
+        "201":
+          description: Report created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShortageReport"
+
+  /shortages/{id}/resolve:
+    patch:
+      operationId: resolveShortage
+      tags: [shortages]
+      summary: Resolve shortage report (Admin/Buyer)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveShortageBody"
+      responses:
+        "200":
+          description: Resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShortageReport"
+
+  /salaries:
+    get:
+      operationId: listSalaries
+      tags: [salaries]
+      summary: List salary records (Admin only)
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+        - name: userId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Salary records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalaryRecord"
+    post:
+      operationId: createSalaryRecord
+      tags: [salaries]
+      summary: Create/pay salary (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSalaryBody"
+      responses:
+        "201":
+          description: Salary record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalaryRecord"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/sales-chart:
+    get:
+      operationId: getSalesChart
+      tags: [dashboard]
+      summary: Sales data for chart (last 7 days)
+      responses:
+        "200":
+          description: Sales chart data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesChartPoint"
+
+  /dashboard/top-products:
+    get:
+      operationId: getTopProducts
+      tags: [dashboard]
+      summary: Top selling products
+      responses:
+        "200":
+          description: Top products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TopProduct"
+
+  /dashboard/expiring-products:
+    get:
+      operationId: getExpiringProducts
+      tags: [dashboard]
+      summary: Products expiring soon
+      responses:
+        "200":
+          description: Expiring products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+  /ai/inventory-query:
+    post:
+      operationId: aiInventoryQuery
+      tags: [ai]
+      summary: AI assistant for inventory queries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiQueryBody"
+      responses:
+        "200":
+          description: AI response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiQueryResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    LoginBody:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+      required:
+        - user
+        - token
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, cashier, buyer, worker]
+        baseSalary:
+          type: ["number", "null"]
+        phone:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - email
+        - role
+        - createdAt
+
+    CreateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [cashier, buyer, worker]
+        baseSalary:
+          type: ["number", "null"]
+        phone:
+          type: ["string", "null"]
+      required:
+        - name
+        - email
+        - password
+        - role
+
+    UpdateUserBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        password:
+          type: ["string", "null"]
+        role:
+          type: ["string", "null"]
+        baseSalary:
+          type: ["number", "null"]
+        phone:
+          type: ["string", "null"]
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        barcode:
+          type: ["string", "null"]
+        name:
+          type: string
+        category:
+          type: string
+        wholesalePrice:
+          type: number
+        retailPrice:
+          type: number
+        stock:
+          type: integer
+        unit:
+          type: string
+          enum: [piece, carton, kg]
+        cartonSize:
+          type: ["integer", "null"]
+        expiryDate:
+          type: ["string", "null"]
+        supplier:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - category
+        - wholesalePrice
+        - retailPrice
+        - stock
+        - unit
+        - createdAt
+        - updatedAt
+
+    CreateProductBody:
+      type: object
+      properties:
+        barcode:
+          type: ["string", "null"]
+        name:
+          type: string
+        category:
+          type: string
+        wholesalePrice:
+          type: number
+        retailPrice:
+          type: number
+        stock:
+          type: integer
+        unit:
+          type: string
+          enum: [piece, carton, kg]
+        cartonSize:
+          type: ["integer", "null"]
+        expiryDate:
+          type: ["string", "null"]
+        supplier:
+          type: ["string", "null"]
+      required:
+        - name
+        - category
+        - wholesalePrice
+        - retailPrice
+        - stock
+        - unit
+
+    UpdateProductBody:
+      type: object
+      properties:
+        barcode:
+          type: ["string", "null"]
+        name:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        wholesalePrice:
+          type: ["number", "null"]
+        retailPrice:
+          type: ["number", "null"]
+        stock:
+          type: ["integer", "null"]
+        unit:
+          type: ["string", "null"]
+        cartonSize:
+          type: ["integer", "null"]
+        expiryDate:
+          type: ["string", "null"]
+        supplier:
+          type: ["string", "null"]
+
+    SaleItem:
+      type: object
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        price:
+          type: number
+        quantity:
+          type: number
+        unit:
+          type: string
+        subtotal:
+          type: number
+      required:
+        - productId
+        - productName
+        - price
+        - quantity
+        - unit
+        - subtotal
+
+    Sale:
+      type: object
+      properties:
+        id:
+          type: integer
+        cashierId:
+          type: integer
+        cashierName:
+          type: string
+        customerId:
+          type: ["integer", "null"]
+        customerName:
+          type: ["string", "null"]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SaleItem"
+        subtotal:
+          type: number
+        discount:
+          type: number
+        total:
+          type: number
+        paid:
+          type: boolean
+        paymentMethod:
+          type: string
+          enum: [cash, karni, card]
+        createdAt:
+          type: string
+      required:
+        - id
+        - cashierId
+        - cashierName
+        - items
+        - subtotal
+        - discount
+        - total
+        - paid
+        - paymentMethod
+        - createdAt
+
+    CreateSaleBody:
+      type: object
+      properties:
+        cashierId:
+          type: integer
+        customerId:
+          type: ["integer", "null"]
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId:
+                type: integer
+              quantity:
+                type: number
+              unit:
+                type: string
+            required:
+              - productId
+              - quantity
+              - unit
+        discount:
+          type: number
+        paymentMethod:
+          type: string
+          enum: [cash, karni, card]
+      required:
+        - cashierId
+        - items
+        - paymentMethod
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        creditLimit:
+          type: number
+        totalDebt:
+          type: number
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - creditLimit
+        - totalDebt
+        - createdAt
+
+    CreateCustomerBody:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        creditLimit:
+          type: number
+      required:
+        - name
+
+    UpdateCustomerBody:
+      type: object
+      properties:
+        name:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        creditLimit:
+          type: ["number", "null"]
+
+    PayDebtBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        note:
+          type: ["string", "null"]
+      required:
+        - amount
+
+    ShortageReport:
+      type: object
+      properties:
+        id:
+          type: integer
+        productId:
+          type: ["integer", "null"]
+        productName:
+          type: string
+        reportedById:
+          type: integer
+        reportedByName:
+          type: string
+        type:
+          type: string
+          enum: [shortage, damage, expired]
+        quantity:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, resolved, dismissed]
+        resolvedById:
+          type: ["integer", "null"]
+        resolvedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - productName
+        - reportedById
+        - reportedByName
+        - type
+        - status
+        - createdAt
+
+    CreateShortageBody:
+      type: object
+      properties:
+        productId:
+          type: ["integer", "null"]
+        productName:
+          type: string
+        type:
+          type: string
+          enum: [shortage, damage, expired]
+        quantity:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - productName
+        - type
+
+    ResolveShortageBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [resolved, dismissed]
+        notes:
+          type: ["string", "null"]
+      required:
+        - status
+
+    SalaryRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userName:
+          type: string
+        userRole:
+          type: string
+        month:
+          type: string
+        baseSalary:
+          type: number
+        bonus:
+          type: number
+        deduction:
+          type: number
+        netSalary:
+          type: number
+        paid:
+          type: boolean
+        paidAt:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - userName
+        - userRole
+        - month
+        - baseSalary
+        - bonus
+        - deduction
+        - netSalary
+        - paid
+        - createdAt
+
+    CreateSalaryBody:
+      type: object
+      properties:
+        userId:
+          type: integer
+        month:
+          type: string
+        baseSalary:
+          type: number
+        bonus:
+          type: number
+        deduction:
+          type: number
+        paid:
+          type: boolean
+        notes:
+          type: ["string", "null"]
+      required:
+        - userId
+        - month
+        - baseSalary
+
+    DashboardSummary:
+      type: object
+      properties:
+        todaySales:
+          type: number
+        todayRevenue:
+          type: number
+        totalProducts:
+          type: integer
+        lowStockCount:
+          type: integer
+        expiringCount:
+          type: integer
+        totalDebt:
+          type: number
+        pendingShortages:
+          type: integer
+        monthRevenue:
+          type: number
+        monthProfit:
+          type: number
+      required:
+        - todaySales
+        - todayRevenue
+        - totalProducts
+        - lowStockCount
+        - expiringCount
+        - totalDebt
+        - pendingShortages
+        - monthRevenue
+        - monthProfit
+
+    SalesChartPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        revenue:
+          type: number
+        profit:
+          type: number
+        count:
+          type: integer
+      required:
+        - date
+        - revenue
+        - profit
+        - count
+
+    TopProduct:
+      type: object
+      properties:
+        productId:
+          type: integer
+        productName:
+          type: string
+        totalSold:
+          type: number
+        revenue:
+          type: number
+      required:
+        - productId
+        - productName
+        - totalSold
+        - revenue
+
+    AiQueryBody:
+      type: object
+      properties:
+        question:
+          type: string
+      required:
+        - question
+
+    AiQueryResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+      required:
+        - answer
+        - products

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "نظام إدارة السوبرماركت"
+version = "1.0.0"
+id = "artifacts/supermarket"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19528
+
+[services.development]
+run = "pnpm --filter @workspace/supermarket run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/supermarket", "run", "build" ]
+publicDir = "artifacts/supermarket/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19528"
+BASE_PATH = "/"

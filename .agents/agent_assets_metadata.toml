@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "hlG3lyWA6dOJXtJPyoSoJ"
+uri = "file://ملاحظات_المشروع.txt"
+type = "text"
+title = "توثيق نظام السوبرماركت - نسخة 2.0"
