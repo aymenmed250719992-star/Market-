@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function Login() {
   const { login } = useAuth();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -83,6 +85,15 @@ export default function Login() {
               دخول
             </Button>
           </form>
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            زبون جديد؟{" "}
+            <button
+              onClick={() => setLocation("/register")}
+              className="text-primary font-medium hover:underline"
+            >
+              إنشاء حساب جديد
+            </button>
+          </div>
         </CardContent>
       </Card>
     </div>

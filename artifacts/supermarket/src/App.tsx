@@ -19,6 +19,7 @@ import Tasks from "@/pages/tasks";
 import Expenses from "@/pages/expenses";
 import Advances from "@/pages/advances";
 import CustomerPortal from "@/pages/customer-portal";
+import Register from "@/pages/register";
 import OnlineOrders from "@/pages/online-orders";
 import DistributorPortal from "@/pages/distributor-portal";
 import NotFound from "@/pages/not-found";
@@ -78,6 +79,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route path="/customer" component={CustomerPortal} />
       <Route path="/" component={HomeRedirect} />
       <Route path="/dashboard">

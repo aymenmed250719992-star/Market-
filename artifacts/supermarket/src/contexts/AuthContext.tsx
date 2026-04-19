@@ -1,24 +1,44 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext } from "react";
 import { useGetMe, useLogin, useLogout, getGetMeQueryKey, User, LoginBody } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 
+interface RegisterData {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+}
+
 interface AuthContextType {
   user: User | null;
   login: (data: LoginBody) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+async function apiRegister(data: RegisterData) {
+  const res = await fetch(`${BASE}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(json?.error || "حدث خطأ أثناء إنشاء الحساب");
+  return json;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { data: user, isLoading, error } = useGetMe({
-    query: {
-      retry: false,
-    }
+  const { data: user, isLoading } = useGetMe({
+    query: { retry: false },
   });
 
   const loginMutation = useLogin();
@@ -31,6 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLocation(role === "distributor" ? "/distributor" : role === "customer" ? "/customer" : "/dashboard");
   };
 
+  const register = async (data: RegisterData) => {
+    const response: any = await apiRegister(data);
+    await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    setLocation("/customer");
+  };
+
   const handleLogout = async () => {
     await logoutMutation.mutateAsync();
     queryClient.setQueryData(getGetMeQueryKey(), null);
@@ -38,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user: user ?? null, login, logout: handleLogout, isLoading }}>
+    <AuthContext.Provider value={{ user: user ?? null, login, register, logout: handleLogout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

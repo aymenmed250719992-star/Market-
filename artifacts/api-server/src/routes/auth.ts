@@ -1,8 +1,55 @@
 import { Router, type IRouter } from "express";
-import { firestore, tsToDate } from "../lib/firebase";
+import { firestore, nextId, tsToDate } from "../lib/firebase";
 import { LoginBody } from "@workspace/api-zod";
+import { z } from "zod";
+
+const RegisterBody = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  phone: z.string().min(9),
+  password: z.string().min(6),
+});
 
 const router: IRouter = Router();
+
+router.post("/auth/register", async (req, res): Promise<void> => {
+  const parsed = RegisterBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "بيانات غير صحيحة، تأكد من ملء جميع الحقول" });
+    return;
+  }
+  const { name, email, phone, password } = parsed.data;
+
+  const existing = await firestore.collection("users").where("email", "==", email).limit(1).get();
+  if (!existing.empty) {
+    res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل" });
+    return;
+  }
+
+  const now = new Date();
+  const id = await nextId("users");
+  const newUser = {
+    name,
+    email,
+    phone,
+    password,
+    role: "customer",
+    baseSalary: null,
+    employeeBarcode: null,
+    activityPoints: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await firestore.collection("users").doc(String(id)).set(newUser);
+
+  const { password: _pw, ...safeUser } = newUser;
+  const token = Buffer.from(JSON.stringify({ id, role: "customer" })).toString("base64");
+  res.cookie("session", token, { httpOnly: true, sameSite: "lax" });
+  res.status(201).json({
+    user: { ...safeUser, id, createdAt: now, updatedAt: now },
+    token,
+  });
+});
 
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
