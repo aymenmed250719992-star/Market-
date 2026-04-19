@@ -40,7 +40,7 @@ function initFirebase() {
 
 initFirebase();
 
-export const firestore = getFirestore();
+export const firestore = getFirestore(undefined as any, "default");
 
 export async function nextId(collection: string): Promise<number> {
   const counterRef = firestore.collection("_counters").doc(collection);
