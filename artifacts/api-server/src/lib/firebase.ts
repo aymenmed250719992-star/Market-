@@ -10,11 +10,29 @@ function initFirebase() {
     throw new Error("FIREBASE_SERVICE_ACCOUNT env var is required for Firebase Admin SDK");
   }
 
-  const parsed = JSON.parse(serviceAccount);
+  // Replit may escape newlines in secrets — try to unescape first
+  const rawJson = serviceAccount.replace(/\\n/g, "\n");
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    // fallback: try original as-is
+    try {
+      parsed = JSON.parse(serviceAccount);
+    } catch {
+      throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON");
+    }
+  }
+
+  // Ensure private_key newlines are real newlines (not escaped)
+  if (parsed.private_key && typeof parsed.private_key === "string") {
+    parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+  }
 
   initializeApp({
     credential: cert(parsed),
-    projectId: process.env.FIREBASE_PROJECT_ID,
+    projectId: parsed.project_id ?? process.env.FIREBASE_PROJECT_ID,
   });
 
   logger.info("Firebase Admin initialized");
