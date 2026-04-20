@@ -28,6 +28,10 @@ A full-stack Algerian Supermarket Management System with RBAC, Arabic RTL UI, on
 - **Dashboard Analytics**: Sales charts, top products, low stock alerts
 - **Arabic RTL UI**: Full right-to-left, Tajawal font, dark mode by default, DZD currency
 
+## User Preferences
+
+- Do not add online payment gateways or payment integrations such as Stripe, PayPal, checkout pages, card processors, or subscription billing. Keep sales/order payment handling limited to local store concepts such as cash, debt/karni, delivery collection, or store pickup.
+
 ## Admin Credentials
 
 - Email: `aymenmed25071999@gmail.com`
