@@ -16,21 +16,23 @@ A full-stack Algerian Supermarket Management System with RBAC, Arabic RTL UI, on
 ## Features
 
 - **RBAC**: Admin, Cashier, Buyer, Worker, Customer, Distributor route/UI guards
-- **POS Terminal**: Barcode search, cart, hold cart, discounts, karni debt sales, thermal receipt printing
+- **POS Terminal**: Barcode search, cart, hold cart, discounts, karni debt sales, thermal receipt printing, shift open/close reconciliation, and quick restock task requests
 - **Customer Portal**: Public `/customer` page for product browsing, online orders, debt lookup, and recent invoice/order lookup by phone
 - **Online Orders**: Admin/cashier `/online-orders` page to track order status and assign distributors
 - **Distributor Portal**: Distributor `/distributor` page for publishing wholesale supply offers; admin can view distributor offers
 - **AI Assistant**: GPT-powered Arabic inventory queries integrated into POS via Replit AI Integrations with deterministic database fallback
-- **Karni System**: Customer debt tracking with credit limits
+- **Karni System**: Customer debt tracking with credit limits and local cash debt collection records
 - **Expiry Tracking**: Visual alerts for products expiring within 30 days
 - **Shortage Reporting**: Workers report shortages/damage without direct stock edit
 - **Payroll**: Monthly salary records with bonus/deduction (admin only)
+- **Staff Operations**: Employee account management, task approval workflow, expense tracking, advances/penalties, and payroll summaries
 - **Dashboard Analytics**: Sales charts, top products, low stock alerts
 - **Arabic RTL UI**: Full right-to-left, Tajawal font, dark mode by default, DZD currency
 
 ## User Preferences
 
 - Do not add online payment gateways or payment integrations such as Stripe, PayPal, checkout pages, card processors, or subscription billing. Keep sales/order payment handling limited to local store concepts such as cash, debt/karni, delivery collection, or store pickup.
+- Firebase service account files must not be committed. If Firebase is used, place the JSON in the `FIREBASE_SERVICE_ACCOUNT` secret after regenerating any exposed key.
 
 ## Admin Credentials
 
@@ -122,13 +124,20 @@ POST /api/ai/inventory-query
 - `artifacts/supermarket/src/pages/online-orders.tsx` — Admin/cashier online order management
 - `artifacts/supermarket/src/pages/distributor-portal.tsx` — Distributor/admin offer portal
 - `artifacts/supermarket/src/pages/pos.tsx` — POS terminal
+- `artifacts/supermarket/src/pages/tasks.tsx` — Staff task workflow with status summaries
+- `artifacts/supermarket/src/pages/employees.tsx` — Admin account and staff management
+- `artifacts/supermarket/src/pages/expenses.tsx` — Monthly expenses and net profit view
+- `artifacts/supermarket/src/pages/advances.tsx` — Employee advances and penalty deductions
+- `artifacts/supermarket/src/pages/salaries.tsx` — Payroll records and monthly salary totals
 
 ## Seeded Data
 
 - 4 employees (admin, cashier, buyer, worker)
+- 2 portal users (customer, distributor)
 - 15 Algerian products across categories
 - 4 customers with karni debt data
 - 5 sample sales
+- sample shortages, tasks, expenses, advances, online orders, distributor offers, and a closed shift for dashboard/report realism
 
 ## Development
 
@@ -148,7 +157,7 @@ pnpm --filter @workspace/api-spec run codegen
 
 Current Replit artifact workflows run the API server and frontend separately:
 - `artifacts/api-server: API Server` on port `8080`
-- `artifacts/supermarket: web` on port `19528` with `BASE_PATH=/`
+- `artifacts/supermarket: Start application` on port `3000` with `BASE_PATH=/`
 - frontend development proxy forwards `/api` requests to the API server
 
 For Replit compatibility, the API server no longer crashes when Firebase credentials are absent. It preserves the existing Firestore-style route code and uses local persisted data in `.data/firestore-local.json` during development; if `FIREBASE_SERVICE_ACCOUNT` is later added, the same code initializes Firebase Admin instead.

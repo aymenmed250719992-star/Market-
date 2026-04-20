@@ -111,6 +111,26 @@ export default function Tasks() {
     return t.status === activeTab;
   });
 
+  const visibleTasks = isAdmin ? tasks : tasks.filter(t => t.assignedToId === user?.id);
+  const statusCounts = {
+    pending: visibleTasks.filter(t => t.status === "pending").length,
+    completed: visibleTasks.filter(t => t.status === "completed").length,
+    approved: visibleTasks.filter(t => t.status === "approved").length,
+    rejected: visibleTasks.filter(t => t.status === "rejected").length,
+  };
+
+  const typeLabels: Record<string, string> = {
+    restock: "تعبئة الرفوف",
+    damage: "تبليغ تالف",
+    report: "تقرير",
+    other: "أخرى",
+  };
+
+  const roleLabels: Record<string, string> = {
+    worker: "عامل",
+    buyer: "مشتري",
+  };
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'restock': return <RefreshCw className="h-4 w-4" />;
@@ -144,19 +164,50 @@ export default function Tasks() {
         )}
       </div>
 
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">بانتظار التنفيذ</p>
+            <p className="text-2xl font-bold mt-1">{statusCounts.pending}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">تنتظر الاعتماد</p>
+            <p className="text-2xl font-bold mt-1 text-blue-600">{statusCounts.completed}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">معتمدة</p>
+            <p className="text-2xl font-bold mt-1 text-green-600">{statusCounts.approved}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">مرفوضة</p>
+            <p className="text-2xl font-bold mt-1 text-destructive">{statusCounts.rejected}</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-md">
-          <TabsTrigger value="pending">قيد الانتظار</TabsTrigger>
-          <TabsTrigger value="completed">مكتملة</TabsTrigger>
-          <TabsTrigger value="approved">معتمدة</TabsTrigger>
-          <TabsTrigger value="rejected">مرفوضة</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+          <TabsTrigger value="pending">قيد الانتظار ({statusCounts.pending})</TabsTrigger>
+          <TabsTrigger value="completed">مكتملة ({statusCounts.completed})</TabsTrigger>
+          <TabsTrigger value="approved">معتمدة ({statusCounts.approved})</TabsTrigger>
+          <TabsTrigger value="rejected">مرفوضة ({statusCounts.rejected})</TabsTrigger>
         </TabsList>
 
         <div className="mt-6">
           {isLoading ? (
             <div className="text-center py-10">جاري التحميل...</div>
           ) : filteredTasks.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">لا توجد مهام في هذا القسم</div>
+            <Card className="border-dashed">
+              <CardContent className="py-12 text-center text-muted-foreground">
+                لا توجد مهام في هذا القسم حالياً
+              </CardContent>
+            </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredTasks.map(task => (
@@ -165,7 +216,7 @@ export default function Tasks() {
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="gap-1">
-                          {getTypeIcon(task.type)} {task.type}
+                          {getTypeIcon(task.type)} {typeLabels[task.type] || task.type}
                         </Badge>
                         {getStatusBadge(task.status)}
                       </div>
@@ -174,7 +225,7 @@ export default function Tasks() {
                     <CardTitle className="text-lg mt-2">{task.title}</CardTitle>
                   </CardHeader>
                   <CardContent className="pb-3 text-sm">
-                    <p className="text-muted-foreground mb-3">{task.description}</p>
+                    <p className="text-muted-foreground mb-3">{task.description || "لا يوجد وصف إضافي"}</p>
                     {task.productName && (
                       <p className="font-medium mb-2 text-primary">المنتج: {task.productName}</p>
                     )}
@@ -283,7 +334,7 @@ function CreateTaskModal({ open, onOpenChange, onSubmit, users, isLoading }: any
                 <SelectTrigger><SelectValue placeholder="اختر العامل..." /></SelectTrigger>
                 <SelectContent>
                   {users.filter((u: any) => u.role === 'worker' || u.role === 'buyer').map((u: any) => (
-                    <SelectItem key={u.id} value={u.id.toString()}>{u.name} ({u.role})</SelectItem>
+                    <SelectItem key={u.id} value={u.id.toString()}>{u.name} ({roleLabels[u.role] || u.role})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

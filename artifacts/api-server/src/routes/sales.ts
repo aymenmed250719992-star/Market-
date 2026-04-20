@@ -59,6 +59,12 @@ router.post("/sales", async (req, res): Promise<void> => {
     const product = productSnap.data()!;
     const price = parseFloat(product.retailPrice);
     const qty = item.quantity;
+    const currentStock = Number(product.stock ?? 0);
+    const currentShelfStock = Number(product.shelfStock ?? currentStock);
+    if (currentShelfStock < qty || currentStock < qty) {
+      res.status(400).json({ error: `الكمية غير كافية من ${product.name}` });
+      return;
+    }
     const lineTotal = price * qty;
     subtotal += lineTotal;
     saleItems.push({
@@ -70,7 +76,8 @@ router.post("/sales", async (req, res): Promise<void> => {
       subtotal: lineTotal,
     });
     await firestore.collection("products").doc(productSnap.id).update({
-      stock: product.stock - Math.floor(qty),
+      stock: Math.max(0, currentStock - qty),
+      shelfStock: Math.max(0, currentShelfStock - qty),
       updatedAt: new Date(),
     });
   }

@@ -2,7 +2,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useGetDashboardSummary, useGetSalesChart, useGetTopProducts, useGetExpiringProducts, useListProducts, useListShortages, useListSales } from "@workspace/api-client-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { Package, AlertTriangle, Banknote, Users, ShoppingCart, TrendingUp, Clock } from "lucide-react";
+import { Package, AlertTriangle, Banknote, Users, ShoppingCart, TrendingUp, Clock, Warehouse } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 
@@ -33,10 +33,10 @@ function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard title="مبيعات اليوم" value={`${summary?.todayRevenue ?? 0} دج`} icon={Banknote} />
-        <SummaryCard title="أرباح الشهر" value={`${summary?.monthProfit ?? 0} دج`} icon={TrendingUp} />
-        <SummaryCard title="نواقص معلقة" value={summary?.pendingShortages ?? 0} icon={AlertTriangle} alert={(summary?.pendingShortages ?? 0) > 0} />
-        <SummaryCard title="منتجات تنتهي قريباً" value={summary?.expiringCount ?? 0} icon={Clock} alert={(summary?.expiringCount ?? 0) > 0} />
+        <SummaryCard title="مبيعات اليوم" value={`${summary?.todayRevenue ?? 0} دج`} icon={Banknote} gradient="from-emerald-500/20 to-transparent" />
+        <SummaryCard title="صافي ربح الشهر" value={`${(summary as any)?.monthNetProfit ?? 0} دج`} icon={TrendingUp} gradient="from-blue-500/20 to-transparent" />
+        <SummaryCard title="نواقص معلقة" value={summary?.pendingShortages ?? 0} icon={AlertTriangle} alert={(summary?.pendingShortages ?? 0) > 0} gradient="from-red-500/20 to-transparent" />
+        <SummaryCard title="منتجات تنتهي قريباً" value={summary?.expiringCount ?? 0} icon={Clock} alert={(summary?.expiringCount ?? 0) > 0} gradient="from-amber-500/20 to-transparent" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
@@ -47,6 +47,14 @@ function AdminDashboard() {
           alert={(summary as any)?.todayNetProfit < 0}
           className={(summary as any)?.todayNetProfit >= 0 ? "border-green-500/50 bg-green-500/5" : ""} 
           iconClassName={(summary as any)?.todayNetProfit >= 0 ? "text-green-600 bg-green-100" : ""}
+        />
+        <SummaryCard 
+          title="رفوف منخفضة" 
+          value={(summary as any)?.lowStockCount ?? 0} 
+          icon={Warehouse} 
+          alert={((summary as any)?.lowStockCount ?? 0) > 0}
+          className="border-orange-500/50 bg-orange-500/5"
+          iconClassName="text-orange-600 bg-orange-100"
         />
         <SummaryCard 
           title="ربح شهري إجمالي" 
@@ -60,13 +68,7 @@ function AdminDashboard() {
           className="border-amber-500/50 bg-amber-500/5"
           iconClassName="text-amber-600 bg-amber-100"
         />
-        <SummaryCard 
-          title="تسبقات الموظفين" 
-          value={`${(summary as any)?.totalAdvances ?? 0} دج`} 
-          icon={Users} 
-          className="border-orange-500/50 bg-orange-500/5"
-          iconClassName="text-orange-600 bg-orange-100"
-        />
+        <SummaryCard title="ديون الكرني" value={`${(summary as any)?.totalDebt ?? 0} دج`} icon={Users} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -88,7 +90,8 @@ function AdminDashboard() {
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip />
-                  <Area type="monotone" dataKey="revenue" name="المداخيل" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorRevenue)" />
+                <Area type="monotone" dataKey="revenue" name="المداخيل" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorRevenue)" />
+                <Area type="monotone" dataKey="profit" name="الربح الخام" stroke="hsl(var(--accent))" fillOpacity={0} />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -146,7 +149,7 @@ function CashierDashboard() {
                 <div key={s.id} className="flex justify-between items-center border-b border-border pb-2 last:border-0">
                   <div>
                     <div className="font-medium">{format(new Date(s.createdAt), "HH:mm - yyyy/MM/dd")}</div>
-                    <div className="text-sm text-muted-foreground">{s.paymentMethod === 'cash' ? 'نقداً' : s.paymentMethod === 'karni' ? 'كرني' : 'بطاقة'}</div>
+                    <div className="text-sm text-muted-foreground">{s.paymentMethod === 'cash' ? 'نقداً' : s.paymentMethod === 'karni' ? 'كرني' : 'محلي'}</div>
                   </div>
                   <div className="font-bold">{s.total} دج</div>
                 </div>
@@ -216,9 +219,10 @@ function WorkerDashboard() {
   );
 }
 
-function SummaryCard({ title, value, icon: Icon, alert = false, className = "", iconClassName = "" }: { title: string, value: string | number, icon: any, alert?: boolean, className?: string, iconClassName?: string }) {
+function SummaryCard({ title, value, icon: Icon, alert = false, className = "", iconClassName = "", gradient = "" }: { title: string, value: string | number, icon: any, alert?: boolean, className?: string, iconClassName?: string, gradient?: string }) {
   return (
-    <Card className={`${alert ? "border-destructive/50 bg-destructive/5" : ""} ${className}`}>
+    <Card className={`overflow-hidden ${alert ? "border-destructive/50 bg-destructive/5" : ""} ${className}`}>
+      {gradient && <div className={`h-1 bg-gradient-to-l ${gradient}`} />}
       <CardContent className="p-6 flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-muted-foreground">{title}</p>

@@ -72,6 +72,8 @@ export default function Expenses() {
 
   if (user?.role !== "admin") return null;
 
+  const money = (value: number | undefined) => `${(value || 0).toLocaleString("ar-DZ")} دج`;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -92,21 +94,27 @@ export default function Expenses() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-6">
-            <p className="text-sm font-medium text-muted-foreground">إجمالي الأرباح (قبل المصاريف)</p>
-            <h3 className="text-2xl font-bold mt-2">{netProfit?.grossProfit || 0} دج</h3>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-muted-foreground">إجمالي الأرباح قبل المصاريف</p>
+              <Calculator className="h-5 w-5 text-primary" />
+            </div>
+            <h3 className="text-2xl font-bold mt-2">{money(netProfit?.grossProfit)}</h3>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
-            <p className="text-sm font-medium text-muted-foreground">إجمالي المصاريف</p>
-            <h3 className="text-2xl font-bold mt-2 text-destructive">{netProfit?.totalExpenses || 0} دج</h3>
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-muted-foreground">إجمالي المصاريف</p>
+              <TrendingDown className="h-5 w-5 text-destructive" />
+            </div>
+            <h3 className="text-2xl font-bold mt-2 text-destructive">{money(netProfit?.totalExpenses)}</h3>
           </CardContent>
         </Card>
         <Card className={(netProfit?.netProfit || 0) >= 0 ? 'bg-green-500/10 border-green-500/50' : 'bg-destructive/10 border-destructive/50'}>
           <CardContent className="p-6">
             <p className="text-sm font-medium text-muted-foreground">صافي الربح</p>
             <h3 className={`text-2xl font-bold mt-2 ${(netProfit?.netProfit || 0) >= 0 ? 'text-green-600' : 'text-destructive'}`}>
-              {netProfit?.netProfit || 0} دج
+              {money(netProfit?.netProfit)}
             </h3>
           </CardContent>
         </Card>
@@ -139,8 +147,8 @@ export default function Expenses() {
                 <TableCell>
                   {exp.type === 'monthly' ? 'شهري' : exp.type === 'daily' ? 'يومي' : 'مرة واحدة'}
                 </TableCell>
-                <TableCell className="font-bold">{exp.amount} دج</TableCell>
-                <TableCell className="text-muted-foreground">{exp.dailyAmount ? `${exp.dailyAmount} دج` : '-'}</TableCell>
+                <TableCell className="font-bold">{money(exp.amount)}</TableCell>
+                <TableCell className="text-muted-foreground">{exp.dailyAmount ? money(exp.dailyAmount) : '-'}</TableCell>
                 <TableCell>{exp.notes || '-'}</TableCell>
                 <TableCell className="text-left">
                   <Button variant="ghost" size="icon" onClick={() => {

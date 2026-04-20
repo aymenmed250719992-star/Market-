@@ -24,7 +24,7 @@ const OpenShiftBody = z.object({
 });
 
 const CloseShiftBody = z.object({
-  shiftId: z.number().int(),
+  shiftId: z.number().int().optional(),
   closingCash: z.number().min(0),
   notes: z.string().optional(),
 });
@@ -91,9 +91,27 @@ router.post("/shifts/close", async (req, res): Promise<void> => {
     return;
   }
 
-  const { shiftId, closingCash, notes } = parsed.data;
-  const shiftSnap = await firestore.collection("shifts").doc(String(shiftId)).get();
-  if (!shiftSnap.exists) {
+  const { closingCash, notes } = parsed.data;
+  let shiftId = parsed.data.shiftId;
+  let shiftSnap = shiftId ? await firestore.collection("shifts").doc(String(shiftId)).get() : null;
+  if (!shiftSnap?.exists) {
+    const token = req.cookies?.session ?? req.headers.authorization?.replace("Bearer ", "");
+    if (token) {
+      try {
+        const payload = JSON.parse(Buffer.from(token, "base64").toString());
+        const activeSnap = await firestore.collection("shifts")
+          .where("cashierId", "==", payload.id)
+          .where("status", "==", "open")
+          .limit(1)
+          .get();
+        if (!activeSnap.empty) {
+          shiftId = parseInt(activeSnap.docs[0].id, 10);
+          shiftSnap = activeSnap.docs[0] as any;
+        }
+      } catch {}
+    }
+  }
+  if (!shiftSnap?.exists) {
     res.status(404).json({ error: "الوردية غير موجودة" });
     return;
   }

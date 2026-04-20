@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Banknote } from "lucide-react";
+import { Plus, Banknote, ReceiptText, CheckCircle2, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
@@ -69,6 +69,12 @@ export default function Salaries() {
   };
 
   const netSalary = parseFloat(formData.baseSalary || "0") + parseFloat(formData.bonus || "0") - parseFloat(formData.deduction || "0");
+  const staffUsers = users?.filter(u => !["customer", "distributor"].includes(u.role)) ?? [];
+  const salaryRows = salaries ?? [];
+  const totalPayroll = salaryRows.reduce((sum, s) => sum + s.netSalary, 0);
+  const paidCount = salaryRows.filter(s => s.paid).length;
+  const unpaidCount = salaryRows.filter(s => !s.paid).length;
+  const money = (value: number) => `${value.toLocaleString("ar-DZ")} دج`;
 
   return (
     <div className="space-y-6">
@@ -90,6 +96,30 @@ export default function Salaries() {
           onChange={(e) => setSelectedMonth(e.target.value)} 
           className="max-w-[200px]"
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">إجمالي الرواتب الصافية</p>
+            <ReceiptText className="h-5 w-5 text-primary" />
+          </div>
+          <p className="text-2xl font-bold mt-2">{money(totalPayroll)}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">مدفوعة</p>
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
+          </div>
+          <p className="text-2xl font-bold mt-2 text-green-600">{paidCount}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">غير مدفوعة</p>
+            <Clock className="h-5 w-5 text-orange-600" />
+          </div>
+          <p className="text-2xl font-bold mt-2 text-orange-600">{unpaidCount}</p>
+        </div>
       </div>
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -124,10 +154,10 @@ export default function Salaries() {
               <TableRow key={s.id}>
                 <TableCell className="font-bold">{s.userName}</TableCell>
                 <TableCell>{s.month}</TableCell>
-                <TableCell>{s.baseSalary} دج</TableCell>
-                <TableCell className="text-primary">{s.bonus > 0 ? `+${s.bonus}` : '-'} دج</TableCell>
-                <TableCell className="text-destructive">{s.deduction > 0 ? `-${s.deduction}` : '-'} دج</TableCell>
-                <TableCell className="font-bold">{s.netSalary} دج</TableCell>
+                <TableCell>{money(s.baseSalary)}</TableCell>
+                <TableCell className="text-primary">{s.bonus > 0 ? `+${money(s.bonus)}` : '-'}</TableCell>
+                <TableCell className="text-destructive">{s.deduction > 0 ? `-${money(s.deduction)}` : '-'}</TableCell>
+                <TableCell className="font-bold">{money(s.netSalary)}</TableCell>
                 <TableCell>
                   {s.paid ? (
                     <span className="text-primary bg-primary/10 px-2 py-1 rounded text-xs font-bold">مدفوع</span>
@@ -162,7 +192,7 @@ export default function Salaries() {
                   <SelectValue placeholder="اختر الموظف" />
                 </SelectTrigger>
                 <SelectContent>
-                  {users?.map(u => (
+                  {staffUsers.map(u => (
                     <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -190,7 +220,7 @@ export default function Salaries() {
 
             <div className="bg-muted p-4 rounded-md flex justify-between items-center text-lg">
               <span>الصافي:</span>
-              <span className="font-bold">{isNaN(netSalary) ? 0 : netSalary} دج</span>
+              <span className="font-bold">{money(isNaN(netSalary) ? 0 : netSalary)}</span>
             </div>
 
             <div className="space-y-2">

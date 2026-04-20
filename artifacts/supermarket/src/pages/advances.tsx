@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { UserMinus, Plus, Trash2, CheckCircle2, AlertTriangle, Users } from "lucide-react";
+import { UserMinus, Plus, Trash2, CheckCircle2, AlertTriangle, Users, WalletCards } from "lucide-react";
 import { format } from "date-fns";
 
 export default function Advances() {
@@ -88,6 +88,11 @@ export default function Advances() {
   if (user?.role !== "admin") return null;
 
   const filteredAdvances = advances.filter((a: any) => activeTab === 'advances' ? a.type === 'advance' : a.type === 'penalty');
+  const staffUsers = users.filter((u: any) => !["customer", "distributor"].includes(u.role));
+  const totalAdvances = advances.filter((a: any) => a.type === "advance").reduce((sum: number, a: any) => sum + a.amount, 0);
+  const totalPenalties = advances.filter((a: any) => a.type === "penalty").reduce((sum: number, a: any) => sum + a.amount, 0);
+  const pendingDeductions = advances.filter((a: any) => !a.deductedFromPayroll).reduce((sum: number, a: any) => sum + a.amount, 0);
+  const money = (value: number) => `${value.toLocaleString("ar-DZ")} دج`;
 
   const employeeSummaries = advances.reduce((acc: any, a: any) => {
     if (!acc[a.employeeId]) {
@@ -125,6 +130,45 @@ export default function Advances() {
         <Input type="month" value={month} onChange={e => setMonth(e.target.value)} className="w-[200px]" />
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">إجمالي التسبقات</p>
+              <WalletCards className="h-5 w-5 text-orange-500" />
+            </div>
+            <p className="text-2xl font-bold mt-2 text-orange-500">{money(totalAdvances)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">إجمالي الخصومات</p>
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+            </div>
+            <p className="text-2xl font-bold mt-2 text-destructive">{money(totalPenalties)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">بانتظار خصم الراتب</p>
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+            </div>
+            <p className="text-2xl font-bold mt-2">{money(pendingDeductions)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">موظفون متأثرون</p>
+              <Users className="h-5 w-5 text-blue-600" />
+            </div>
+            <p className="text-2xl font-bold mt-2">{Object.keys(employeeSummaries).length}</p>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Object.values(employeeSummaries).map((summary: any, i) => (
           <Card key={i}>
@@ -137,15 +181,15 @@ export default function Advances() {
             <CardContent>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">تسبقات:</span>
-                <span className="font-bold text-orange-500">{summary.totalAdvances} دج</span>
+                <span className="font-bold text-orange-500">{money(summary.totalAdvances)}</span>
               </div>
               <div className="flex justify-between text-sm mt-1">
                 <span className="text-muted-foreground">خصومات:</span>
-                <span className="font-bold text-destructive">{summary.totalPenalties} دج</span>
+                <span className="font-bold text-destructive">{money(summary.totalPenalties)}</span>
               </div>
               <div className="flex justify-between font-bold mt-2 pt-2 border-t">
                 <span>إجمالي الخصم:</span>
-                <span>{summary.netDeduction} دج</span>
+                <span>{money(summary.netDeduction)}</span>
               </div>
             </CardContent>
           </Card>
@@ -182,7 +226,7 @@ export default function Advances() {
                   <TableRow key={record.id}>
                     <TableCell className="font-bold">{record.employeeName}</TableCell>
                     <TableCell className={`font-bold ${record.type === 'penalty' ? 'text-destructive' : 'text-orange-500'}`}>
-                      {record.amount} دج
+                      {money(record.amount)}
                     </TableCell>
                     <TableCell>{record.reason}</TableCell>
                     <TableCell>{format(new Date(record.createdAt), "yyyy/MM/dd")}</TableCell>
@@ -226,7 +270,7 @@ export default function Advances() {
         onOpenChange={setIsModalOpen}
         onSubmit={(data: any) => createAdvance.mutate(data)}
         isLoading={createAdvance.isPending}
-        users={users}
+        users={staffUsers}
         currentMonth={month}
       />
     </div>

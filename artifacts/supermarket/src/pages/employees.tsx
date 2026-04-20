@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Edit, Trash2, UsersRound } from "lucide-react";
+import { Search, Plus, Edit, Trash2, UsersRound, ShieldCheck, ScanLine, PackageCheck, Truck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
@@ -107,9 +107,11 @@ export default function Employees() {
     }
   };
 
-  const filteredUsers = users?.filter(u => 
-    u.name.includes(search) || u.email.includes(search) || (u.phone && u.phone.includes(search))
-  );
+  const filteredUsers = users?.filter(u => {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
+    return u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term) || (u.phone && u.phone.includes(term));
+  });
 
   const roleLabels: Record<string, string> = {
     admin: "أدمن",
@@ -118,6 +120,19 @@ export default function Employees() {
     worker: "عامل",
     customer: "زبون",
     distributor: "موزع",
+  };
+
+  const staffUsers = users?.filter(u => !["customer", "distributor"].includes(u.role)) ?? [];
+  const cashierCount = users?.filter(u => u.role === "cashier").length ?? 0;
+  const operationsCount = users?.filter(u => ["worker", "buyer"].includes(u.role)).length ?? 0;
+  const distributorCount = users?.filter(u => u.role === "distributor").length ?? 0;
+
+  const getRoleClassName = (role: string) => {
+    if (role === "admin") return "bg-primary/15 text-primary border border-primary/20";
+    if (role === "cashier") return "bg-emerald-500/15 text-emerald-700 border border-emerald-500/20";
+    if (role === "buyer" || role === "worker") return "bg-blue-500/15 text-blue-700 border border-blue-500/20";
+    if (role === "distributor") return "bg-orange-500/15 text-orange-700 border border-orange-500/20";
+    return "bg-secondary text-secondary-foreground";
   };
 
   return (
@@ -142,6 +157,37 @@ export default function Employees() {
             onChange={(e) => setSearch(e.target.value)}
             data-testid="input-search-employee"
           />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">طاقم المتجر</span>
+            <ShieldCheck className="h-5 w-5 text-primary" />
+          </div>
+          <p className="text-2xl font-bold mt-2">{staffUsers.length}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">القابضون</span>
+            <ScanLine className="h-5 w-5 text-emerald-600" />
+          </div>
+          <p className="text-2xl font-bold mt-2">{cashierCount}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">العمال والمشترون</span>
+            <PackageCheck className="h-5 w-5 text-blue-600" />
+          </div>
+          <p className="text-2xl font-bold mt-2">{operationsCount}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">الموزعون</span>
+            <Truck className="h-5 w-5 text-orange-600" />
+          </div>
+          <p className="text-2xl font-bold mt-2">{distributorCount}</p>
         </div>
       </div>
 
@@ -176,11 +222,7 @@ export default function Employees() {
                 <TableCell className="font-bold">{u.name}</TableCell>
                 <TableCell dir="ltr" className="text-right text-muted-foreground">{u.email}</TableCell>
                 <TableCell>
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    u.role === 'admin' ? 'bg-primary/20 text-primary' :
-                    u.role === 'cashier' ? 'bg-accent/20 text-accent' :
-                    'bg-secondary text-secondary-foreground'
-                  }`}>
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${getRoleClassName(u.role)}`}>
                     {roleLabels[u.role] || u.role}
                   </span>
                 </TableCell>

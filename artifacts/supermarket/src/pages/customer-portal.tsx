@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Search, ShoppingBag, Plus, Minus, Receipt, CreditCard } from "lucide-react";
+import { Search, ShoppingBag, Plus, Minus, Receipt, NotebookTabs } from "lucide-react";
 
 type Product = {
   id: number;
@@ -202,7 +202,7 @@ export default function CustomerPortal() {
             </div>
 
             <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-              <h2 className="text-xl font-bold flex items-center gap-2"><CreditCard className="h-5 w-5" /> متابعة الدين والفواتير</h2>
+              <h2 className="text-xl font-bold flex items-center gap-2"><NotebookTabs className="h-5 w-5" /> متابعة الكرني والفواتير</h2>
               <div className="flex gap-2">
                 <Input dir="ltr" className="text-right" placeholder="رقم الهاتف" value={lookupPhone} onChange={(e) => setLookupPhone(e.target.value)} />
                 <Button disabled={!lookupPhone || isLookingUp} onClick={() => lookupCustomer()}>بحث</Button>

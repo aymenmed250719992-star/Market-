@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Minus, Trash2, Printer, Bot, X, CreditCard, Banknote, Users, AlertCircle, LogOut } from "lucide-react";
+import { Search, Plus, Minus, Trash2, Printer, Bot, X, AlertCircle, LogOut, BellRing } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -95,7 +95,7 @@ export default function POS() {
       return res.json();
     },
     onSuccess: (data) => {
-      setActiveShift(data);
+      setActiveShift(data?.shift ?? data);
       setShiftModalOpen(false);
       toast({ title: "تم", description: "تم فتح الوردية بنجاح" });
     },
@@ -146,6 +146,7 @@ export default function POS() {
   const handleCloseShift = (e: React.FormEvent) => {
     e.preventDefault();
     closeShiftMutation.mutate({
+      shiftId: activeShift?.id,
       closingCash: parseFloat(closingCash) || 0,
       notes: closeShiftNotes
     });
@@ -245,6 +246,29 @@ export default function POS() {
       setCustomerId("");
     } catch (error: any) {
       toast({ variant: "destructive", title: "خطأ في البيع", description: error.message });
+    }
+  };
+
+  const createRestockTask = async (product: Product) => {
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title: `تعبئة رف ${product.name}`,
+          description: `طلب سريع من نقطة البيع: المخزون على الرف منخفض (${product.stock} ${product.unit})`,
+          type: "restock",
+          points: 10,
+          productId: product.id,
+          productName: product.name,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "تعذر إنشاء المهمة");
+      toast({ title: "تم إنشاء مهمة", description: `تم إرسال طلب تعبئة ${product.name} للعامل` });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "خطأ", description: error.message });
     }
   };
 
@@ -399,6 +423,20 @@ export default function POS() {
                       {p.stock} {p.unit === 'piece' ? 'حبة' : p.unit === 'kg' ? 'كغ' : 'كرتون'}
                     </span>
                   </div>
+                  {p.stock <= 5 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full gap-2 border-accent/50 text-accent hover:bg-accent/10"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        createRestockTask(p);
+                      }}
+                    >
+                      <BellRing className="h-4 w-4" />
+                      طلب تعبئة
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -471,10 +509,6 @@ export default function POS() {
                 <div className="flex items-center space-x-2 space-x-reverse">
                   <RadioGroupItem value="cash" id="r-cash" />
                   <Label htmlFor="r-cash" className="cursor-pointer">نقداً</Label>
-                </div>
-                <div className="flex items-center space-x-2 space-x-reverse">
-                  <RadioGroupItem value="card" id="r-card" />
-                  <Label htmlFor="r-card" className="cursor-pointer">بطاقة</Label>
                 </div>
                 <div className="flex items-center space-x-2 space-x-reverse text-destructive font-bold">
                   <RadioGroupItem value="karni" id="r-karni" />
@@ -660,7 +694,7 @@ export default function POS() {
             </div>
             
             <div className="text-center text-sm pt-4 font-bold">
-              طريقة الدفع: {lastSale?.paymentMethod === 'cash' ? 'نقداً' : lastSale?.paymentMethod === 'karni' ? 'كرني' : 'بطاقة'}
+              طريقة الدفع: {lastSale?.paymentMethod === 'cash' ? 'نقداً' : lastSale?.paymentMethod === 'karni' ? 'كرني' : 'محلي'}
             </div>
           </div>
           <DialogFooter className="flex-row justify-between sm:justify-between">

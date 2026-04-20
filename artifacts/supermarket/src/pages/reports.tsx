@@ -163,7 +163,7 @@ export default function Reports() {
                     sale.paymentMethod === 'karni' ? 'bg-destructive/20 text-destructive' :
                     'bg-secondary text-secondary-foreground'
                   }`}>
-                    {sale.paymentMethod === 'cash' ? 'نقداً' : sale.paymentMethod === 'karni' ? 'كرني' : 'بطاقة'}
+                    {sale.paymentMethod === 'cash' ? 'نقداً' : sale.paymentMethod === 'karni' ? 'كرني' : 'محلي'}
                   </span>
                 </TableCell>
                 <TableCell className="text-destructive">{sale.discount > 0 ? `-${sale.discount}` : '-'}</TableCell>
