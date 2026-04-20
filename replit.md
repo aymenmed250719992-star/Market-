@@ -7,7 +7,8 @@ A full-stack Algerian Supermarket Management System with RBAC, Arabic RTL UI, on
 **Monorepo (pnpm workspaces):**
 - `artifacts/api-server` — Express.js 5 REST API (port 8080)
 - `artifacts/supermarket` — React + Vite frontend (root `/`)
-- `lib/db` — Drizzle ORM schemas + PostgreSQL migrations
+- `artifacts/api-server/.data/firestore-local.json` — local persisted Firestore-compatible data used on Replit when `FIREBASE_SERVICE_ACCOUNT` is not configured
+- `lib/db` — Drizzle ORM schemas + PostgreSQL migrations retained in the workspace but not used by the active API routes
 - `lib/api-spec` — OpenAPI 3.0 spec + Orval codegen config
 - `lib/api-zod` — Generated Zod validation schemas
 - `lib/api-client-react` — Generated TanStack Query hooks
@@ -35,7 +36,7 @@ A full-stack Algerian Supermarket Management System with RBAC, Arabic RTL UI, on
 ## Technology Stack
 
 - **Backend**: Express.js 5, Node.js, TypeScript
-- **Database**: PostgreSQL via Replit DB, Drizzle ORM
+- **Database**: Firebase Admin Firestore when `FIREBASE_SERVICE_ACCOUNT` is configured; local persisted Firestore-compatible JSON storage in Replit development when it is not configured
 - **Frontend**: React 19, Vite, TypeScript, Tailwind CSS, shadcn/ui
 - **State**: TanStack Query (React Query v5)
 - **Routing**: Wouter
@@ -146,4 +147,6 @@ Current Replit artifact workflows run the API server and frontend separately:
 - `artifacts/supermarket: web` on port `19528` with `BASE_PATH=/`
 - frontend development proxy forwards `/api` requests to the API server
 
-The inventory assistant uses the Replit-managed OpenAI integration when available and falls back to deterministic inventory analysis from PostgreSQL if the AI response is unavailable or empty.
+For Replit compatibility, the API server no longer crashes when Firebase credentials are absent. It preserves the existing Firestore-style route code and uses local persisted data in `.data/firestore-local.json` during development; if `FIREBASE_SERVICE_ACCOUNT` is later added, the same code initializes Firebase Admin instead.
+
+The inventory assistant uses the Replit-managed OpenAI integration when available and falls back to deterministic inventory analysis from the active inventory data if the AI response is unavailable or empty.
