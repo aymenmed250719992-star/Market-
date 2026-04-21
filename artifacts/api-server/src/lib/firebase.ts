@@ -308,51 +308,15 @@ function createSeedData(): StoreData {
       "6": { name: "موزع العاصمة", email: "distributor@supermarket.local", phone: "0555444333", password: "distributor123", role: "distributor", baseSalary: null, employeeBarcode: null, activityPoints: 0, createdAt: now, updatedAt: now },
     },
     products: getSeedProducts(now),
-    customers: {
-      "1": { name: "محمد بن علي", phone: "0555123456", address: "الجزائر العاصمة", totalDebt: "2500", creditLimit: "10000", createdAt: now, updatedAt: now },
-      "2": { name: "فاطمة زروقي", phone: "0555987654", address: "وهران", totalDebt: "0", creditLimit: "8000", createdAt: now, updatedAt: now },
-      "3": { name: "عائلة مراد", phone: "0555765432", address: "البليدة", totalDebt: "6800", creditLimit: "12000", createdAt: now, updatedAt: now },
-      "4": { name: "أمينة قادري", phone: "0555345678", address: "قسنطينة", totalDebt: "1200", creditLimit: "9000", createdAt: now, updatedAt: now },
-    },
-    sales: {
-      "1": { cashierId: 2, cashierName: "Cashier", customerId: null, customerName: null, items: [{ productId: 8, productName: "سكر أبيض حبة 1 كغ", price: 115, quantity: 3, unit: "piece", subtotal: 345 }, { productId: 21, productName: "مياه معدنية ليلى 1.5 لتر", price: 50, quantity: 6, unit: "piece", subtotal: 300 }], subtotal: "645", discount: "0", total: "645", paid: true, paymentMethod: "cash", createdAt: day(0) },
-      "2": { cashierId: 2, cashierName: "Cashier", customerId: 1, customerName: "محمد بن علي", items: [{ productId: 5, productName: "زيت سفينة 1 لتر", price: 225, quantity: 2, unit: "piece", subtotal: 450 }, { productId: 1, productName: "دقيق مطحون ممتاز - قنطارة 5 كغ", price: 320, quantity: 1, unit: "piece", subtotal: 320 }], subtotal: "770", discount: "20", total: "750", paid: false, paymentMethod: "karni", createdAt: day(0) },
-      "3": { cashierId: 2, cashierName: "Cashier", customerId: null, customerName: null, items: [{ productId: 76, productName: "طماطم معلبة مركزة - أيدا 800 غ", price: 180, quantity: 4, unit: "piece", subtotal: 720 }, { productId: 26, productName: "مشروب كوكاكولا 1.25 لتر", price: 175, quantity: 3, unit: "piece", subtotal: 525 }], subtotal: "1245", discount: "0", total: "1245", paid: true, paymentMethod: "cash", createdAt: day(-1) },
-      "4": { cashierId: 2, cashierName: "Cashier", customerId: 3, customerName: "عائلة مراد", items: [{ productId: 109, productName: "حفاضات - هيبيز مقاس 4", price: 900, quantity: 1, unit: "piece", subtotal: 900 }, { productId: 48, productName: "لبن رائب 1 لتر", price: 105, quantity: 2, unit: "piece", subtotal: 210 }], subtotal: "1110", discount: "10", total: "1100", paid: false, paymentMethod: "karni", createdAt: day(-2) },
-      "5": { cashierId: 2, cashierName: "Cashier", customerId: null, customerName: null, items: [{ productId: 38, productName: "قهوة مطحونة - المعلم 250 غ", price: 500, quantity: 1, unit: "piece", subtotal: 500 }, { productId: 73, productName: "تمر دقلة نور 1 كغ", price: 720, quantity: 1, unit: "kg", subtotal: 720 }], subtotal: "1220", discount: "20", total: "1200", paid: true, paymentMethod: "cash", createdAt: day(-3) },
-    },
-    shortages: {
-      "1": { productId: 5, productName: "زيت سفينة 1 لتر", quantity: 6, type: "shortage", status: "pending", reportedById: 2, reportedByName: "Cashier", notes: "الرف شبه فارغ في جهة الزيوت", createdAt: day(0), resolvedAt: null },
-      "2": { productId: 73, productName: "تمر دقلة نور 1 كغ", quantity: 8, type: "shortage", status: "pending", reportedById: 4, reportedByName: "Worker", notes: "يحتاج تعبئة من المستودع", createdAt: day(-1), resolvedAt: null },
-      "3": { productId: 48, productName: "لبن رائب 1 لتر", quantity: 2, type: "expired", status: "resolved", reportedById: 4, reportedByName: "Worker", notes: "تم عزل العبوات القريبة من الانتهاء", createdAt: day(-2), resolvedAt: day(-1) },
-    },
-    tasks: {
-      "1": { title: "تعبئة رف الزيوت", description: "نقل زيت سفينة من المستودع إلى الرف", assignedToId: 4, assignedToName: "Worker", reportedById: 2, reportedByName: "Cashier", type: "restock", productId: 5, productName: "زيت سفينة 1 لتر", status: "pending", points: 10, approvedById: null, approvedByName: null, approvedAt: null, completedAt: null, notes: null, createdAt: day(0) },
-      "2": { title: "فحص صلاحية الألبان", description: "مراجعة الحليب واللبن والجبن قبل نهاية اليوم", assignedToId: 4, assignedToName: "Worker", reportedById: 1, reportedByName: "Aymen Admin", type: "report", productId: 48, productName: "لبن رائب 1 لتر", status: "pending", points: 12, approvedById: null, approvedByName: null, approvedAt: null, completedAt: null, notes: null, createdAt: day(0) },
-      "3": { title: "مراجعة عرض الموزع", description: "مقارنة سعر القهوة الجديد مع متوسط السوق", assignedToId: 3, assignedToName: "Buyer", reportedById: 1, reportedByName: "Aymen Admin", type: "other", productId: 38, productName: "قهوة مطحونة - المعلم 250 غ", status: "pending", points: 8, approvedById: null, approvedByName: null, approvedAt: null, completedAt: null, notes: null, createdAt: day(-1) },
-    },
-    expenses: {
-      "1": { name: "كراء المحل", category: "إيجار", amount: "120000", type: "monthly", month: currentMonth, daysInMonth: 30, dailyAmount: "4000", createdAt: now, updatedAt: now },
-      "2": { name: "كهرباء وتبريد", category: "خدمات", amount: "36000", type: "monthly", month: currentMonth, daysInMonth: 30, dailyAmount: "1200", createdAt: now, updatedAt: now },
-      "3": { name: "صيانة قارئ الباركود", category: "صيانة", amount: "6500", type: "one_time", month: currentMonth, daysInMonth: null, dailyAmount: null, createdAt: now, updatedAt: now },
-    },
-    advances: {
-      "1": { userId: 4, userName: "Worker", amount: "5000", type: "advance", month: currentMonth, reason: "تسبيق شهري", createdAt: day(-4), updatedAt: day(-4) },
-      "2": { userId: 2, userName: "Cashier", amount: "1200", type: "penalty", month: currentMonth, reason: "فرق صندوق سابق", createdAt: day(-6), updatedAt: day(-6) },
-    },
-    shifts: {
-      "1": { cashierId: 2, cashierName: "Cashier", startingFloat: "5000", systemTotal: "2760", totalSales: "4060", closingCash: "7760", deficit: "0", notes: "وردية تجريبية مغلقة", status: "closed", openedAt: day(-1), closedAt: day(-1) },
-    },
-    online_orders: {
-      "1": { customerId: 1, customerName: "محمد بن علي", phone: "0555123456", address: "الجزائر العاصمة", notes: "التوصيل بعد العصر", items: [{ productId: 21, productName: "مياه معدنية ليلى 1.5 لتر", price: 50, quantity: 6, subtotal: 300 }, { productId: 131, productName: "خبز بلدي", price: 25, quantity: 5, subtotal: 125 }], subtotal: "425", deliveryFee: "200", total: "625", paymentMethod: "cash_on_delivery", status: "pending", assignedDistributorId: 6, assignedDistributorName: "موزع العاصمة", createdAt: day(0), updatedAt: day(0) },
-      "2": { customerId: 3, customerName: "عائلة مراد", phone: "0555765432", address: "البليدة", notes: "إضافة على الكرني", items: [{ productId: 109, productName: "حفاضات - هيبيز مقاس 4", price: 900, quantity: 1, subtotal: 900 }], subtotal: "900", deliveryFee: "200", total: "1100", paymentMethod: "karni", status: "confirmed", assignedDistributorId: null, assignedDistributorName: null, createdAt: day(-1), updatedAt: day(-1) },
-      "3": { customerId: 4, customerName: "أمينة قادري", phone: "0555345678", address: "قسنطينة", notes: "استلام من المتجر", items: [{ productId: 38, productName: "قهوة مطحونة - المعلم 250 غ", price: 500, quantity: 2, subtotal: 1000 }], subtotal: "1000", deliveryFee: "0", total: "1000", paymentMethod: "store_pickup", status: "preparing", assignedDistributorId: null, assignedDistributorName: null, createdAt: day(-2), updatedAt: day(-2) },
-    },
-    distributor_offers: {
-      "1": { productName: "قهوة مطحونة - المعلم 250 غ", category: "مشروبات", wholesalePrice: "400", minimumQuantity: 24, availableQuantity: 240, deliveryDays: 2, notes: "سعر خاص للكمية الكبيرة", status: "active", distributorId: 6, distributorName: "موزع العاصمة", createdAt: day(-1), updatedAt: day(-1) },
-      "2": { productName: "زيت سفينة 1 لتر", category: "مواد غذائية", wholesalePrice: "185", minimumQuantity: 12, availableQuantity: 96, deliveryDays: 1, notes: "متوفر للتسليم السريع", status: "active", distributorId: 6, distributorName: "موزع العاصمة", createdAt: day(-2), updatedAt: day(-2) },
-      "3": { productName: "حفاضات - هيبيز مقاس 4", category: "تجميل", wholesalePrice: "700", minimumQuantity: 6, availableQuantity: 48, deliveryDays: 3, notes: "دفعة جديدة", status: "paused", distributorId: 6, distributorName: "موزع العاصمة", createdAt: day(-3), updatedAt: day(-1) },
-    },
+    customers: {},
+    sales: {},
+    shortages: {},
+    tasks: {},
+    expenses: {},
+    advances: {},
+    shifts: {},
+    online_orders: {},
+    distributor_offers: {},
     salaries: {},
   };
 }
