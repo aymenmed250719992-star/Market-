@@ -8,10 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Edit, Trash2, AlertTriangle, Package } from "lucide-react";
+import { Plus, Search, Edit, Trash2, AlertTriangle, Package, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, differenceInDays } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 export default function Products() {
   const { user } = useAuth();
@@ -30,6 +31,8 @@ export default function Products() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanSearchOpen, setScanSearchOpen] = useState(false);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -209,6 +212,9 @@ export default function Products() {
             data-testid="input-search-product"
           />
         </div>
+        <Button type="button" variant="outline" onClick={() => setScanSearchOpen(true)}>
+          <Camera className="ml-2 h-4 w-4" /> مسح بالكاميرا
+        </Button>
         <Select value={category} onValueChange={setCategory}>
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="اختر الفئة" />
@@ -332,7 +338,12 @@ export default function Products() {
             </div>
             <div className="space-y-2">
               <Label>الباركود (اختياري)</Label>
-              <Input className="font-mono text-left" dir="ltr" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} />
+              <div className="flex gap-2">
+                <Input className="font-mono text-left" dir="ltr" value={formData.barcode} onChange={e => setFormData({...formData, barcode: e.target.value})} />
+                <Button type="button" variant="outline" size="icon" onClick={() => setScannerOpen(true)} title="مسح الباركود بالكاميرا">
+                  <Camera className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>الفئة</Label>
@@ -380,6 +391,18 @@ export default function Products() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <BarcodeScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onDetected={(code) => { setFormData(prev => ({ ...prev, barcode: code })); setScannerOpen(false); }}
+      />
+
+      <BarcodeScanner
+        open={scanSearchOpen}
+        onClose={() => setScanSearchOpen(false)}
+        onDetected={(code) => { setSearch(code); setScanSearchOpen(false); }}
+      />
     </div>
   );
 }

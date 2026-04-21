@@ -19,9 +19,10 @@ function toShift(id: number, data: any) {
 }
 
 const OpenShiftBody = z.object({
-  employeeBarcode: z.string().min(1),
+  employeeBarcode: z.string().min(1).optional(),
+  cashierId: z.number().int().positive().optional(),
   startingFloat: z.number().min(0).default(0),
-});
+}).refine((d) => !!d.employeeBarcode || !!d.cashierId, { message: "employeeBarcode or cashierId is required" });
 
 const CloseShiftBody = z.object({
   shiftId: z.number().int().optional(),
@@ -36,13 +37,23 @@ router.post("/shifts/open", async (req, res): Promise<void> => {
     return;
   }
 
-  const { employeeBarcode, startingFloat } = parsed.data;
-  const userSnap = await firestore.collection("users").where("employeeBarcode", "==", employeeBarcode).limit(1).get();
-  if (userSnap.empty) {
-    res.status(404).json({ error: "الباركود غير معروف — لم يتم التعرف على الموظف" });
-    return;
+  const { employeeBarcode, cashierId, startingFloat } = parsed.data;
+  let userDoc: any;
+  if (employeeBarcode) {
+    const userSnap = await firestore.collection("users").where("employeeBarcode", "==", employeeBarcode).limit(1).get();
+    if (userSnap.empty) {
+      res.status(404).json({ error: "الباركود غير معروف — لم يتم التعرف على الموظف" });
+      return;
+    }
+    userDoc = userSnap.docs[0];
+  } else {
+    const directDoc = await firestore.collection("users").doc(String(cashierId)).get();
+    if (!directDoc.exists) {
+      res.status(404).json({ error: "الموظف غير موجود" });
+      return;
+    }
+    userDoc = directDoc;
   }
-  const userDoc = userSnap.docs[0];
   const user = userDoc.data();
   const userId = parseInt(userDoc.id, 10);
 

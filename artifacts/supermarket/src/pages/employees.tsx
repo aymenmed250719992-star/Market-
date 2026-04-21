@@ -34,8 +34,14 @@ export default function Employees() {
     password: "",
     role: "worker",
     phone: "",
-    baseSalary: ""
+    baseSalary: "",
+    employeeBarcode: ""
   });
+
+  const generateBarcode = () => {
+    const prefix = formData.role === "cashier" ? "CSH" : formData.role === "buyer" ? "BUY" : formData.role === "worker" ? "WRK" : formData.role === "admin" ? "ADM" : "EMP";
+    return `${prefix}${Date.now().toString().slice(-6)}`;
+  };
 
   const handleOpenModal = (employee?: User) => {
     if (employee) {
@@ -43,10 +49,11 @@ export default function Employees() {
       setFormData({
         name: employee.name,
         email: employee.email,
-        password: "", // Don't show password for editing
+        password: "",
         role: employee.role,
         phone: employee.phone || "",
-        baseSalary: employee.baseSalary?.toString() || ""
+        baseSalary: employee.baseSalary?.toString() || "",
+        employeeBarcode: (employee as any).employeeBarcode || ""
       });
     } else {
       setEditingUser(null);
@@ -56,7 +63,8 @@ export default function Employees() {
         password: "",
         role: "worker",
         phone: "",
-        baseSalary: ""
+        baseSalary: "",
+        employeeBarcode: ""
       });
     }
     setIsModalOpen(true);
@@ -70,7 +78,8 @@ export default function Employees() {
         email: formData.email,
         role: formData.role,
         phone: formData.phone || null,
-        baseSalary: formData.baseSalary ? parseFloat(formData.baseSalary) : null
+        baseSalary: formData.baseSalary ? parseFloat(formData.baseSalary) : null,
+        employeeBarcode: formData.employeeBarcode || null
       };
 
       if (!editingUser) {
@@ -198,6 +207,7 @@ export default function Employees() {
               <TableHead>الاسم</TableHead>
               <TableHead>الإيميل</TableHead>
               <TableHead>الدور</TableHead>
+              <TableHead>باركود الموظف</TableHead>
               <TableHead>الهاتف</TableHead>
               <TableHead>الراتب الأساسي (دج)</TableHead>
               <TableHead>تاريخ التعيين</TableHead>
@@ -214,6 +224,7 @@ export default function Employees() {
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-20" /></TableCell>
                 </TableRow>
               ))
@@ -226,6 +237,7 @@ export default function Employees() {
                     {roleLabels[u.role] || u.role}
                   </span>
                 </TableCell>
+                <TableCell dir="ltr" className="text-right font-mono text-xs">{(u as any).employeeBarcode || '-'}</TableCell>
                 <TableCell dir="ltr" className="text-right">{u.phone || '-'}</TableCell>
                 <TableCell>{u.baseSalary ? `${u.baseSalary} دج` : '-'}</TableCell>
                 <TableCell>{format(new Date(u.createdAt), "yyyy/MM/dd")}</TableCell>
@@ -245,7 +257,7 @@ export default function Employees() {
             ))}
             {!isLoading && filteredUsers?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   لا يوجد موظفين
                 </TableCell>
               </TableRow>
@@ -296,6 +308,22 @@ export default function Employees() {
               <div className="space-y-2">
                 <Label>الراتب الأساسي (دج)</Label>
                 <Input type="number" value={formData.baseSalary} onChange={e => setFormData({...formData, baseSalary: e.target.value})} />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label>باركود الموظف (لفتح الوردية وتسجيل الحضور)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    dir="ltr"
+                    className="text-right font-mono"
+                    placeholder="مثال: CSH123456"
+                    value={formData.employeeBarcode}
+                    onChange={e => setFormData({...formData, employeeBarcode: e.target.value})}
+                  />
+                  <Button type="button" variant="outline" onClick={() => setFormData({...formData, employeeBarcode: generateBarcode()})}>
+                    توليد
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">يستخدم القابض هذا الباركود عند فتح الوردية في نقطة البيع.</p>
               </div>
             </div>
             <DialogFooter className="pt-4">
