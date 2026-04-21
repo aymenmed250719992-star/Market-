@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Bot, X, AlertCircle, LogOut, Search } from "lucide-react";
+import { AlertCircle, LogOut, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -46,9 +46,6 @@ export default function POS() {
   const [kgWeight, setKgWeight] = useState("");
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lastSale, setLastSale] = useState<any>(null);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiQuery, setAiQuery] = useState("");
-  const [aiChat, setAiChat] = useState<Array<{ role: string; text: string; products?: any[] }>>([]);
 
   // Shift state
   const [activeShift, setActiveShift] = useState<any>(null);
@@ -212,21 +209,6 @@ export default function POS() {
     }
   };
 
-  const askAi = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!aiQuery.trim()) return;
-    setAiChat(prev => [...prev, { role: "user", text: aiQuery }]);
-    const q = aiQuery;
-    setAiQuery("");
-    try {
-      const res = await fetch("/api/ai/inventory-query", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q, createTaskIfNeeded: true, requesterId: user?.id, requesterName: user?.name }) });
-      const data = await res.json();
-      setAiChat(prev => [...prev, { role: "ai", text: data.answer, products: data.products }]);
-    } catch {
-      setAiChat(prev => [...prev, { role: "ai", text: "حدث خطأ في الاتصال بالمساعد" }]);
-    }
-  };
-
   const filteredSearch = products?.filter(p => searchQuery && (p.name.includes(searchQuery) || p.barcode?.includes(searchQuery) || p.category?.includes(searchQuery)));
 
   const now = new Date();
@@ -279,9 +261,6 @@ export default function POS() {
           <span>DU: <span className="text-green-300">{dateStr}</span></span>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setAiOpen(v => !v)} className="text-xs text-green-600 hover:text-green-400 border border-green-900 px-2 py-1 rounded">
-            <Bot className="h-3 w-3 inline mr-1" />AI
-          </button>
           <div className="bg-black border-2 border-green-700 rounded px-4 py-1 text-right" style={{ minWidth: 160, fontFamily: "'Courier New', monospace" }}>
             <div className="text-[10px] text-green-700 uppercase">NET À PAYER</div>
             <div className="text-3xl font-bold text-green-400 tracking-widest" style={{ textShadow: "0 0 8px #22c55e" }}>
@@ -577,35 +556,6 @@ export default function POS() {
         </DialogContent>
       </Dialog>
 
-      {/* ── AI ASSISTANT ── */}
-      <div className={`fixed bottom-0 left-4 z-50 transition-transform duration-300 ${aiOpen ? "translate-y-0" : "translate-y-[calc(100%-36px)]"}`}>
-        <div className="w-72 bg-[#0d0d0d] border border-[#333] rounded-t-lg shadow-2xl flex flex-col h-96">
-          <button className="h-9 bg-[#1a3a1a] text-green-400 flex items-center justify-between px-3 font-bold text-xs w-full cursor-pointer hover:bg-[#1a4a1a] rounded-t-lg" onClick={() => setAiOpen(v => !v)}>
-            <div className="flex items-center gap-1"><Bot className="h-3 w-3" /> مساعد المخزون الذكي</div>
-            <X className={`h-3 w-3 transition-transform ${aiOpen ? "" : "rotate-45"}`} />
-          </button>
-          <div className="flex-1 flex flex-col p-2 overflow-hidden">
-            <div className="flex-1 overflow-y-auto space-y-2 pb-2 text-xs">
-              <div className="bg-[#1a2a1a] text-green-300 p-2 rounded text-xs">مرحباً! اسألني عن المخزون والأسعار.</div>
-              {aiChat.map((msg, i) => (
-                <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                  <div className={`p-2 rounded max-w-[90%] text-xs ${msg.role === "user" ? "bg-blue-900 text-white" : "bg-[#1a2a1a] text-green-300"}`}>{msg.text}</div>
-                  {msg.products?.map(p => (
-                    <div key={p.id} onClick={() => { addProductToCart(p); setAiOpen(false); }} className="mt-1 bg-[#111] border border-[#333] p-1.5 rounded flex justify-between items-center text-xs cursor-pointer hover:border-green-700 w-full">
-                      <span className="truncate">{p.name}</span>
-                      <span className="text-green-400 ml-2">{p.retailPrice}دج</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-            <form onSubmit={askAi} className="flex gap-1 mt-1">
-              <input value={aiQuery} onChange={e => setAiQuery(e.target.value)} placeholder="اسأل..." className="flex-1 bg-[#1a1a1a] border border-[#444] text-white text-xs rounded px-2 py-1 focus:outline-none" dir="rtl" />
-              <button type="submit" className="bg-green-900 hover:bg-green-800 text-white px-2 py-1 rounded text-xs">إرسال</button>
-            </form>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

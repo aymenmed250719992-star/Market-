@@ -10,11 +10,37 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "dummy",
 });
 
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+
+async function callGemini(systemPrompt: string, userQuestion: string): Promise<string | null> {
+  if (!GEMINI_API_KEY) return null;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const body = {
+    systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: userQuestion }] }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 800 },
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Gemini ${res.status}: ${txt.slice(0, 200)}`);
+  }
+  const json: any = await res.json();
+  const text = json?.candidates?.[0]?.content?.parts?.map((p: any) => p.text).join("").trim();
+  return text || null;
+}
+
 const AiInventoryQueryBody = z.object({
   question: z.string().min(1),
   createTaskIfNeeded: z.boolean().optional().default(false),
   requesterId: z.number().int().optional(),
   requesterName: z.string().optional(),
+  role: z.string().optional(),
 });
 
 function formatProduct(product: any): string {
@@ -76,33 +102,96 @@ router.post("/ai/inventory-query", async (req, res): Promise<void> => {
     return;
   }
 
-  const snap = await firestore.collection("products").orderBy("name").get();
-  const products = snap.docs.map((d) => ({ ...d.data(), id: parseInt(d.id, 10) }));
+  const productsSnap = await firestore.collection("products").orderBy("name").get();
+  const products = productsSnap.docs.map((d) => ({ ...d.data(), id: parseInt(d.id, 10) }));
 
-  const inventoryContext = products.map((p: any) =>
+  // Pull operational context too — sales today, open shifts, pending tasks
+  const [salesSnap, shiftsSnap, tasksSnap, customersSnap] = await Promise.all([
+    firestore.collection("sales").get(),
+    firestore.collection("shifts").get(),
+    firestore.collection("tasks").get(),
+    firestore.collection("customers").get(),
+  ]);
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const todaySales = salesSnap.docs.map((d) => d.data()).filter((s: any) => tsToDate(s.createdAt) >= todayStart);
+  const todayRevenue = todaySales.reduce((sum: number, s: any) => sum + parseFloat(s.total ?? "0"), 0);
+  const openShifts = shiftsSnap.docs.map((d) => d.data()).filter((s: any) => s.status === "open");
+  const pendingTasks = tasksSnap.docs.map((d) => d.data()).filter((t: any) => t.status === "pending");
+  const lowStockCount = products.filter((p: any) => (p.shelfStock ?? 0) <= (p.lowStockThreshold ?? 5)).length;
+  const outOfStockCount = products.filter((p: any) => (p.shelfStock ?? 0) === 0).length;
+
+  // Cap inventory context to avoid blowing the prompt for 17k+ products
+  const inventoryContext = products.slice(0, 200).map((p: any) =>
     `- ${p.name} (${p.category}): رفوف=${p.shelfStock}/${p.unit}، مستودع=${p.warehouseStock} كرتون، سعر=${parseFloat(p.retailPrice)} دج${p.unitsPerCarton ? `، وحدات/كرتون=${p.unitsPerCarton}` : ""}${p.expiryDate ? `، انتهاء=${p.expiryDate}` : ""}${p.shelfStock === 0 ? " [⚠️ نفذ من الرف]" : p.shelfStock <= (p.lowStockThreshold ?? 5) ? " [⚠️ مخزون رف منخفض]" : ""}${p.warehouseStock === 0 ? " [🚫 مستودع فارغ]" : p.warehouseStock <= (p.lowWarehouseThreshold ?? 2) ? " [⚠️ مستودع منخفض]" : ""}`
   ).join("\n");
 
-  const systemPrompt = `أنت مساعد ذكاء اصطناعي لسوبرماركت جزائري. المخزون الحالي:\n${inventoryContext}\n\nأجب بالعربية بشكل مختصر ودقيق. العملة دج.`;
+  const summary = `إحصائيات اليوم:
+- إجمالي المنتجات: ${products.length}
+- منتجات منخفضة على الرف: ${lowStockCount}
+- منتجات نافذة كلياً: ${outOfStockCount}
+- مبيعات اليوم: ${todaySales.length} عملية بإجمالي ${todayRevenue.toFixed(2)} دج
+- ورديات مفتوحة: ${openShifts.length}
+- مهام قيد التنفيذ: ${pendingTasks.length}
+- زبائن بحساب كرني: ${customersSnap.docs.length}`;
+
+  const role = parsed.data.role ?? "موظف";
+  const systemPrompt = `أنت "مساعد المتجر الذكي" لسوبرماركت جزائري. اسم المستخدم الحالي: ${parsed.data.requesterName ?? "—"} (الدور: ${role}).
+
+${summary}
+
+عيّنة من المخزون (أول 200 منتج):
+${inventoryContext}
+
+تعليمات الإجابة:
+- أجب بالعربية الفصحى المبسطة، بشكل مختصر ومباشر.
+- استخدم العملة دج.
+- إن سُئلت عن منتج غير موجود في العيّنة، قل ذلك صراحةً واطلب تحديد الاسم.
+- إن لاحظت أن الرف منخفض والمستودع يحتوي بضاعة، اقترح بوضوح نقل كراتين معيّنة من المستودع إلى الرف، وإن أمكن أصدر أمر مهمة بالشكل: [ACTION:RESTOCK:productId:cartons].
+- للأدمن قدّم تحليلات وتوصيات إدارية (مبيعات، عجز، أداء قابضين). للقابض/المشتري ركّز على الأسعار والمخزون.
+- لا تخترع أرقاماً غير موجودة في السياق.`;
+
+  let usedProvider: "gemini" | "openai" | "local" = "local";
+  let answer = "";
+  let lastError: any = null;
+
+  // 1) Try Gemini first if configured
+  if (GEMINI_API_KEY) {
+    try {
+      const g = await callGemini(systemPrompt, parsed.data.question);
+      if (g) { answer = g; usedProvider = "gemini"; }
+    } catch (err: any) {
+      lastError = err;
+      req.log.warn({ err: err?.message }, "Gemini call failed");
+    }
+  }
+
+  // 2) Fall back to OpenAI integration if available and Gemini unavailable
+  if (!answer && process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-5-mini",
+        max_completion_tokens: 600,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: parsed.data.question },
+        ],
+      });
+      answer = completion.choices[0]?.message?.content?.trim() ?? "";
+      if (answer) usedProvider = "openai";
+    } catch (err: any) {
+      lastError = err;
+      req.log.warn({ err: err?.message }, "OpenAI call failed");
+    }
+  }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      max_completion_tokens: 600,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: parsed.data.question },
-      ],
-    });
-
-    let answer = completion.choices[0]?.message?.content?.trim() ?? "";
 
     const actionMatch = answer.match(/\[ACTION:RESTOCK:(\d+):(\d+)\]/);
     let taskCreated = null;
 
     if (!answer) {
       const fallback = buildLocalInventoryAnswer(parsed.data.question, products);
-      res.json({ answer: fallback.answer, products: fallback.products.map(toProductResponse), taskCreated: null });
+      res.json({ answer: fallback.answer, products: fallback.products.map(toProductResponse), taskCreated: null, provider: "local" });
       return;
     }
 
@@ -146,11 +235,11 @@ router.post("/ai/inventory-query", async (req, res): Promise<void> => {
       .slice(0, 5)
       .map(toProductResponse);
 
-    res.json({ answer, products: relevantProducts, taskCreated });
+    res.json({ answer, products: relevantProducts, taskCreated, provider: usedProvider });
   } catch (err) {
     req.log.error({ err }, "AI query failed");
     const fallback = buildLocalInventoryAnswer(parsed.data.question, products);
-    res.json({ answer: fallback.answer, products: fallback.products.map(toProductResponse), taskCreated: null });
+    res.json({ answer: fallback.answer, products: fallback.products.map(toProductResponse), taskCreated: null, provider: "local", error: (lastError as any)?.message });
   }
 });
 
