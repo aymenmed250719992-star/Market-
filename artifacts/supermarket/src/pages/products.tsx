@@ -30,10 +30,14 @@ export default function Products() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const { data: products, isLoading } = useListProducts({
-    search: debouncedSearch || undefined,
-    category: category !== "all" ? category : undefined,
-  });
+  const hasFilter = debouncedSearch.length > 0 || category !== "all";
+  const { data: products, isLoading } = useListProducts(
+    {
+      search: debouncedSearch || undefined,
+      category: category !== "all" ? category : undefined,
+    },
+    { query: { enabled: hasFilter } },
+  );
 
   const { data: categoriesList = [] } = useQuery<string[]>({
     queryKey: ["product-categories"],
@@ -330,9 +334,16 @@ export default function Products() {
                 </TableRow>
               );
             })}
-            {!isLoading && products?.length === 0 && (
+            {!hasFilter && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={canEdit || canDelete ? 8 : 7} className="text-center py-8 text-muted-foreground">
+                  ابحث عن منتج أو اختر فئة لعرض المنتجات
+                </TableCell>
+              </TableRow>
+            )}
+            {hasFilter && !isLoading && products?.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={canEdit || canDelete ? 8 : 7} className="text-center py-8 text-muted-foreground">
                   لا توجد منتجات مطابقة
                 </TableCell>
               </TableRow>

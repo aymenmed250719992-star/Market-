@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Search, ShoppingBag, Plus, Minus, Receipt, NotebookTabs } from "lucide-react";
+import { Search, ShoppingBag, Plus, Minus, Receipt, NotebookTabs, LogIn, UserPlus } from "lucide-react";
 
 type Product = {
   id: number;
@@ -35,9 +35,11 @@ export default function CustomerPortal() {
   const [customerInfo, setCustomerInfo] = useState({ customerName: "", phone: "", address: "", notes: "", paymentMethod: "cash_on_delivery" });
   const [cart, setCart] = useState<Record<number, CartItem>>({});
 
+  const trimmedSearch = search.trim();
   const { data: products = [], isLoading } = useQuery({
-    queryKey: ["customer-products", search],
-    queryFn: () => fetchJson<Product[]>(`/api/products${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+    queryKey: ["customer-products", trimmedSearch],
+    queryFn: () => fetchJson<Product[]>(`/api/products?search=${encodeURIComponent(trimmedSearch)}`),
+    enabled: trimmedSearch.length > 0,
   });
 
   const { data: lookup, refetch: lookupCustomer, isFetching: isLookingUp } = useQuery({
@@ -97,17 +99,19 @@ export default function CustomerPortal() {
   return (
     <div className="min-h-screen bg-background text-foreground" dir="rtl">
       <div className="mx-auto max-w-7xl p-6 space-y-6">
-        <div className="rounded-2xl border border-border bg-card p-6">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold flex items-center gap-2">
-                <ShoppingBag className="h-8 w-8" />
-                واجهة الزبون
-              </h1>
-              <p className="text-muted-foreground mt-2">اطلب مشترياتك من المتجر وتابع ديونك وفواتيرك برقم الهاتف.</p>
-            </div>
-            <a href="/login" className="text-sm text-primary hover:underline">دخول الإدارة أو الموزع</a>
-          </div>
+        <div className="flex justify-end gap-2">
+          <a href="/login">
+            <Button variant="outline" size="sm">
+              <LogIn className="ml-2 h-4 w-4" />
+              تسجيل الدخول
+            </Button>
+          </a>
+          <a href="/register">
+            <Button size="sm">
+              <UserPlus className="ml-2 h-4 w-4" />
+              تسجيل حساب جديد
+            </Button>
+          </a>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
@@ -120,8 +124,12 @@ export default function CustomerPortal() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {isLoading ? (
-                <div className="text-muted-foreground">جاري تحميل المنتجات...</div>
+              {trimmedSearch.length === 0 ? (
+                <div className="text-muted-foreground col-span-full text-center py-8">ابحث عن منتج لعرض النتائج</div>
+              ) : isLoading ? (
+                <div className="text-muted-foreground col-span-full">جاري تحميل المنتجات...</div>
+              ) : products.length === 0 ? (
+                <div className="text-muted-foreground col-span-full text-center py-8">لا توجد منتجات مطابقة</div>
               ) : products.map((product) => (
                 <div key={product.id} className="rounded-xl border border-border bg-card p-4 space-y-3">
                   <div>
