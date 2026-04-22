@@ -50,10 +50,13 @@ router.get("/products", async (req, res): Promise<void> => {
   const today = new Date().toISOString().slice(0, 10);
   const soonDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
+  const { search, category, lowStock, expiringSoon, limit, all } = req.query as Record<string, string | undefined>;
+  const hasFilter = !!(search || (category && category !== "all") || lowStock === "true" || expiringSoon === "true");
+  const maxLimit = parseInt(limit ?? "50", 10) || 50;
+
   const snap = await firestore.collection("products").orderBy("name").get();
   let products = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
 
-  const { search, category, lowStock, expiringSoon } = req.query as Record<string, string | undefined>;
   if (search) {
     const s = search.toLowerCase();
     products = products.filter(({ raw: p }) =>
@@ -63,13 +66,31 @@ router.get("/products", async (req, res): Promise<void> => {
       (p.cartonBarcode && p.cartonBarcode.includes(s))
     );
   }
-  if (category) products = products.filter(({ raw: p }) => p.category === category);
+  if (category && category !== "all") products = products.filter(({ raw: p }) => p.category === category);
   if (lowStock === "true") products = products.filter(({ raw: p }) => p.shelfStock <= (p.lowStockThreshold ?? 5));
   if (expiringSoon === "true") {
     products = products.filter(({ raw: p }) => p.expiryDate && p.expiryDate >= today && p.expiryDate <= soonDate);
   }
 
+  // Lightweight default: when no filter is active, only return up to maxLimit products
+  // unless explicitly opted-in with `all=true`. This keeps the UI fast for 17k+ catalogs.
+  if (!hasFilter && all !== "true") {
+    products = products.slice(0, maxLimit);
+  } else if (hasFilter) {
+    products = products.slice(0, maxLimit * 4); // cap filtered results too
+  }
+
   res.json(products.map(({ raw, id }) => toProduct(id, raw)));
+});
+
+router.get("/products/categories", async (_req, res): Promise<void> => {
+  const snap = await firestore.collection("products").get();
+  const categories = new Set<string>();
+  snap.docs.forEach((d) => {
+    const c = d.data().category;
+    if (c) categories.add(c);
+  });
+  res.json(Array.from(categories).sort());
 });
 
 router.post("/products", async (req, res): Promise<void> => {

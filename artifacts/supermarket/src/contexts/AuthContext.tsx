@@ -14,6 +14,7 @@ interface AuthContextType {
   user: User | null;
   login: (data: LoginBody) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
+  loginAsGuest: (info?: { name?: string; phone?: string }) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
@@ -31,6 +32,18 @@ async function apiRegister(data: RegisterData) {
   });
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new Error(json?.error || "حدث خطأ أثناء إنشاء الحساب");
+  return json;
+}
+
+async function apiGuest(info: { name?: string; phone?: string }) {
+  const res = await fetch(`${BASE}/api/auth/guest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(info ?? {}),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(json?.error || "تعذر الدخول كضيف");
   return json;
 }
 
@@ -57,6 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLocation("/customer");
   };
 
+  const loginAsGuest = async (info?: { name?: string; phone?: string }) => {
+    await apiGuest(info ?? {});
+    await queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
+    setLocation("/customer");
+  };
+
   const handleLogout = async () => {
     await logoutMutation.mutateAsync();
     queryClient.setQueryData(getGetMeQueryKey(), null);
@@ -64,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user: user ?? null, login, register, logout: handleLogout, isLoading }}>
+    <AuthContext.Provider value={{ user: user ?? null, login, register, loginAsGuest, logout: handleLogout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

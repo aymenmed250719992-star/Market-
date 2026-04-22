@@ -191,6 +191,22 @@
   }
 }
 
+/* Print-only styling for receipts: hide everything except the receipt area */
+@media print {
+  body * { visibility: hidden !important; }
+  #receipt-print-area, #receipt-print-area * { visibility: visible !important; }
+  #receipt-print-area {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    padding: 8mm !important;
+  }
+  @page { margin: 6mm; }
+}
+
 @layer utilities {
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;

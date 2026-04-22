@@ -3,118 +3,129 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShoppingBag, LogIn, UserPlus, User } from "lucide-react";
+
+type Mode = "welcome" | "login" | "register" | "guest";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, register, loginAsGuest } = useAuth();
   const { toast } = useToast();
+  const [mode, setMode] = useState<Mode>("welcome");
+  const [loading, setLoading] = useState(false);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    try {
-      await login({ email, password });
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "خطأ في تسجيل الدخول",
-        description: error.message || "تأكد من البريد الإلكتروني وكلمة المرور",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    setLoading(true);
+    try { await login({ email, password }); }
+    catch (err: any) { toast({ variant: "destructive", title: "تعذر الدخول", description: err.message }); }
+    finally { setLoading(false); }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try { await register({ name, email, phone, password }); }
+    catch (err: any) { toast({ variant: "destructive", title: "تعذر إنشاء الحساب", description: err.message }); }
+    finally { setLoading(false); }
+  };
+
+  const handleGuest = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setLoading(true);
+    try { await loginAsGuest({ name: name || undefined, phone: phone || undefined }); }
+    catch (err: any) { toast({ variant: "destructive", title: "تعذر الدخول كضيف", description: err.message }); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.15),transparent_40%),radial-gradient(circle_at_bottom_right,rgba(245,158,11,0.10),transparent_40%)]" />
-
-      <Card className="w-full max-w-4xl relative shadow-2xl border-primary/20">
-        <div className="grid lg:grid-cols-[1fr_400px]">
-          {/* Hero panel */}
-          <div className="hidden lg:flex flex-col justify-between p-10 bg-sidebar text-sidebar-foreground rounded-r-lg border-l border-border">
-            <div>
-              <div className="flex items-center gap-3 mb-8">
-                <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-black text-xl">S</div>
-                <span className="text-2xl font-black tracking-wide">SUPERMARCHÉ</span>
-              </div>
-              <h2 className="text-3xl font-extrabold leading-tight">نظام إدارة السوبرماركت الجزائري</h2>
-              <p className="mt-4 text-muted-foreground leading-7 text-sm">
-                نقطة بيع متكاملة، إدارة مخزون، نظام كرني، طلبات أونلاين، عروض موزعين، ورواتب — كل شيء في واجهة عربية واحدة.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              {["POS سريع", "كرني محلي", "تنبيهات مخزون", "صلاحيات كاملة", "تقارير يومية", "موزعون وزبائن"].map((item) => (
-                <div key={item} className="rounded-lg border border-border/40 bg-background/10 px-3 py-2 font-semibold text-xs">
-                  {item}
-                </div>
-              ))}
-            </div>
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-emerald-950 via-background to-amber-950/40 text-foreground" dir="rtl">
+      {/* HERO */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,185,129,0.18),transparent_50%),radial-gradient(circle_at_70%_80%,rgba(245,158,11,0.12),transparent_50%)]" />
+        <div className="relative z-10 max-w-lg w-full space-y-6">
+          <div className="flex justify-center">
+            <div className="w-20 h-20 rounded-3xl bg-primary text-primary-foreground flex items-center justify-center shadow-2xl text-4xl">🏪</div>
+          </div>
+          <div>
+            <h1 className="text-4xl sm:text-5xl font-black tracking-tight">متجر الجزائر</h1>
+            <p className="mt-3 text-base sm:text-lg text-muted-foreground leading-7">
+              متجرك الإلكتروني المتكامل: تسوّق، تابع طلباتك، وادفع عند الاستلام أو سجّل على الكرني.
+            </p>
           </div>
 
-          {/* Login form */}
-          <div className="flex flex-col justify-center">
-            <CardHeader className="text-center space-y-3 pb-4">
-              <div className="flex justify-center mb-2 lg:hidden">
-                <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-primary-foreground font-black text-2xl shadow-lg">S</div>
-              </div>
-              <CardTitle className="text-2xl font-bold">SUPERMARCHÉ</CardTitle>
-              <CardDescription>تسجيل الدخول إلى نظام الإدارة</CardDescription>
-            </CardHeader>
+          {mode === "welcome" && (
+            <div className="space-y-3 pt-4">
+              <Button className="w-full h-14 text-base font-bold rounded-2xl gap-2" onClick={() => setMode("login")} data-testid="btn-show-login">
+                <LogIn className="h-5 w-5" /> تسجيل الدخول
+              </Button>
+              <Button variant="secondary" className="w-full h-14 text-base font-bold rounded-2xl gap-2" onClick={() => setMode("register")} data-testid="btn-show-register">
+                <UserPlus className="h-5 w-5" /> إنشاء حساب جديد
+              </Button>
+              <Button variant="outline" className="w-full h-14 text-base font-bold rounded-2xl gap-2" onClick={() => handleGuest()} disabled={loading} data-testid="btn-guest">
+                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ShoppingBag className="h-5 w-5" />}
+                دخول كضيف والشراء مباشرة
+              </Button>
+              <p className="text-xs text-muted-foreground pt-2">يمكنك الدخول كضيف وإكمال الطلب الآن، وستحفظ جلستك على هذا الجهاز تلقائياً.</p>
+            </div>
+          )}
 
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
+          {mode === "login" && (
+            <form onSubmit={handleLogin} className="bg-card/80 backdrop-blur border border-border rounded-2xl p-6 space-y-4 text-right shadow-xl">
+              <div className="space-y-2">
+                <Label htmlFor="email">البريد الإلكتروني</Label>
+                <Input id="email" type="email" required dir="ltr" className="text-left h-11" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" data-testid="input-email" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">كلمة المرور</Label>
+                <Input id="password" type="password" required dir="ltr" className="text-left h-11" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" data-testid="input-password" />
+              </div>
+              <Button type="submit" className="w-full h-11 font-bold" disabled={loading} data-testid="button-login">
+                {loading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+                دخول
+              </Button>
+              <button type="button" onClick={() => setMode("welcome")} className="w-full text-sm text-muted-foreground hover:text-foreground">رجوع</button>
+            </form>
+          )}
+
+          {mode === "register" && (
+            <form onSubmit={handleRegister} className="bg-card/80 backdrop-blur border border-border rounded-2xl p-6 space-y-4 text-right shadow-xl">
+              <div className="space-y-2">
+                <Label>الاسم الكامل</Label>
+                <Input required value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="email">البريد الإلكتروني</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="أدخل بريدك الإلكتروني"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    disabled={isLoading}
-                    dir="ltr"
-                    className="text-left h-11"
-                    autoComplete="email"
-                    data-testid="input-email"
-                  />
+                  <Label>الهاتف</Label>
+                  <Input required dir="ltr" className="text-right h-11" value={phone} onChange={(e) => setPhone(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">كلمة المرور</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="أدخل كلمة المرور"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    disabled={isLoading}
-                    dir="ltr"
-                    className="text-left h-11"
-                    autoComplete="current-password"
-                    data-testid="input-password"
-                  />
+                  <Label>كلمة المرور</Label>
+                  <Input required type="password" dir="ltr" className="text-left h-11" value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full h-11 text-base font-bold mt-2"
-                  disabled={isLoading}
-                  data-testid="button-login"
-                >
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  دخول
-                </Button>
-              </form>
-            </CardContent>
-          </div>
+              </div>
+              <div className="space-y-2">
+                <Label>البريد الإلكتروني</Label>
+                <Input required type="email" dir="ltr" className="text-left h-11" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+              <Button type="submit" className="w-full h-11 font-bold" disabled={loading}>
+                {loading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+                إنشاء حساب
+              </Button>
+              <button type="button" onClick={() => setMode("welcome")} className="w-full text-sm text-muted-foreground hover:text-foreground">رجوع</button>
+            </form>
+          )}
         </div>
-      </Card>
+      </div>
+
+      <div className="text-center text-xs text-muted-foreground py-4 border-t border-border/50">
+        © {new Date().getFullYear()} متجر الجزائر — جميع الحقوق محفوظة
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, getListProductsQueryKey, Product } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,9 +22,24 @@ export default function Products() {
   const canDelete = user?.role === "admin";
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory] = useState("all");
-  
-  const { data: products, isLoading } = useListProducts({ search: search || undefined, category: category !== "all" ? category : undefined });
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const { data: products, isLoading } = useListProducts({
+    search: debouncedSearch || undefined,
+    category: category !== "all" ? category : undefined,
+  });
+
+  const { data: categoriesList = [] } = useQuery<string[]>({
+    queryKey: ["product-categories"],
+    queryFn: () => fetch("/api/products/categories", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 60_000,
+  });
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -52,7 +67,7 @@ export default function Products() {
     supplier: ""
   });
 
-  const categories = ["all", ...Array.from(new Set(products?.map(p => p.category) || []))];
+  const categories = ["all", ...categoriesList];
 
   const handleOpenModal = (product?: any) => {
     if (product) {

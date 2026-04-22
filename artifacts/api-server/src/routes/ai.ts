@@ -148,7 +148,14 @@ ${inventoryContext}
 - إن سُئلت عن منتج غير موجود في العيّنة، قل ذلك صراحةً واطلب تحديد الاسم.
 - إن لاحظت أن الرف منخفض والمستودع يحتوي بضاعة، اقترح بوضوح نقل كراتين معيّنة من المستودع إلى الرف، وإن أمكن أصدر أمر مهمة بالشكل: [ACTION:RESTOCK:productId:cartons].
 - للأدمن قدّم تحليلات وتوصيات إدارية (مبيعات، عجز، أداء قابضين). للقابض/المشتري ركّز على الأسعار والمخزون.
-- لا تخترع أرقاماً غير موجودة في السياق.`;
+- لا تخترع أرقاماً غير موجودة في السياق.
+${role === "admin" ? `
+✦ صلاحيات الأدمن (مهم جداً):
+هذا المستخدم أدمن. يمكنك تنفيذ أوامر تعديل بيانات حقيقية. عندما يطلب الأدمن صراحةً تغييراً، أدرج في نهاية ردك أمراً واحداً بالشكل المناسب:
+- لتغيير سعر منتج: [ACTION:UPDATE_PRICE:productId:newRetailPrice]   مثال: [ACTION:UPDATE_PRICE:42:150]
+- لتعديل مخزون منتج: [ACTION:SET_STOCK:productId:shelfStock:warehouseStock]   مثال: [ACTION:SET_STOCK:42:30:5]
+- لإنشاء مهمة جديدة لأي عامل: [ACTION:CREATE_TASK:title|description]
+لا تنفّذ تعديلات إلا بطلب صريح. اذكر للأدمن في ردّك ما الذي ستغيّره قبل الأمر.` : ""}`;
 
   let usedProvider: "gemini" | "openai" | "local" = "local";
   let answer = "";
@@ -185,14 +192,89 @@ ${inventoryContext}
   }
 
   try {
-
     const actionMatch = answer.match(/\[ACTION:RESTOCK:(\d+):(\d+)\]/);
     let taskCreated = null;
+    const executedActions: any[] = [];
 
     if (!answer) {
       const fallback = buildLocalInventoryAnswer(parsed.data.question, products);
       res.json({ answer: fallback.answer, products: fallback.products.map(toProductResponse), taskCreated: null, provider: "local" });
       return;
+    }
+
+    // ── ADMIN-ONLY action execution ──
+    if (role === "admin") {
+      // 1) UPDATE_PRICE
+      const priceRe = /\[ACTION:UPDATE_PRICE:(\d+):([\d.]+)\]/g;
+      for (const m of answer.matchAll(priceRe)) {
+        const pid = parseInt(m[1]);
+        const newPrice = parseFloat(m[2]);
+        if (!isNaN(pid) && newPrice > 0) {
+          const ref = firestore.collection("products").doc(String(pid));
+          const snap = await ref.get();
+          if (snap.exists) {
+            await ref.update({ retailPrice: newPrice.toString(), updatedAt: new Date() });
+            executedActions.push({ type: "UPDATE_PRICE", productId: pid, newPrice });
+          }
+        }
+      }
+      answer = answer.replace(priceRe, "").trim();
+
+      // 2) SET_STOCK
+      const stockRe = /\[ACTION:SET_STOCK:(\d+):(\d+):(\d+)\]/g;
+      for (const m of answer.matchAll(stockRe)) {
+        const pid = parseInt(m[1]);
+        const shelf = parseInt(m[2]);
+        const wh = parseInt(m[3]);
+        if (!isNaN(pid) && shelf >= 0 && wh >= 0) {
+          const ref = firestore.collection("products").doc(String(pid));
+          const snap = await ref.get();
+          if (snap.exists) {
+            await ref.update({ shelfStock: shelf, warehouseStock: wh, stock: shelf + wh, updatedAt: new Date() });
+            executedActions.push({ type: "SET_STOCK", productId: pid, shelfStock: shelf, warehouseStock: wh });
+          }
+        }
+      }
+      answer = answer.replace(stockRe, "").trim();
+
+      // 3) CREATE_TASK
+      const taskRe = /\[ACTION:CREATE_TASK:([^|\]]+)\|([^\]]+)\]/g;
+      for (const m of answer.matchAll(taskRe)) {
+        const title = m[1].trim();
+        const description = m[2].trim();
+        const tid = await nextId("tasks");
+        const now = new Date();
+        const task = {
+          title, description, type: "general", status: "pending", points: 5,
+          productId: null, productName: null,
+          reportedById: parsed.data.requesterId ?? null,
+          reportedByName: parsed.data.requesterName ?? "الأدمن",
+          assignedToId: null, assignedToName: null,
+          approvedById: null, approvedByName: null,
+          approvedAt: null, completedAt: null, notes: null,
+          createdAt: now,
+        };
+        await firestore.collection("tasks").doc(String(tid)).set(task);
+        executedActions.push({ type: "CREATE_TASK", id: tid, title });
+      }
+      answer = answer.replace(taskRe, "").trim();
+
+      if (executedActions.length) {
+        const summaryLines = executedActions.map((a) => {
+          if (a.type === "UPDATE_PRICE") return `✓ تم تحديث سعر المنتج #${a.productId} إلى ${a.newPrice} دج`;
+          if (a.type === "SET_STOCK") return `✓ تم ضبط مخزون المنتج #${a.productId}: رف=${a.shelfStock}، مستودع=${a.warehouseStock}`;
+          if (a.type === "CREATE_TASK") return `✓ تم إنشاء مهمة #${a.id}: ${a.title}`;
+          return "";
+        }).filter(Boolean).join("\n");
+        answer = `${answer}\n\n${summaryLines}`.trim();
+      }
+    } else {
+      // Non-admin: strip any admin actions silently — no execution
+      answer = answer
+        .replace(/\[ACTION:UPDATE_PRICE:[^\]]+\]/g, "")
+        .replace(/\[ACTION:SET_STOCK:[^\]]+\]/g, "")
+        .replace(/\[ACTION:CREATE_TASK:[^\]]+\]/g, "")
+        .trim();
     }
 
     if (actionMatch && parsed.data.createTaskIfNeeded) {
@@ -235,7 +317,7 @@ ${inventoryContext}
       .slice(0, 5)
       .map(toProductResponse);
 
-    res.json({ answer, products: relevantProducts, taskCreated, provider: usedProvider });
+    res.json({ answer, products: relevantProducts, taskCreated, executedActions, provider: usedProvider });
   } catch (err) {
     req.log.error({ err }, "AI query failed");
     const fallback = buildLocalInventoryAnswer(parsed.data.question, products);

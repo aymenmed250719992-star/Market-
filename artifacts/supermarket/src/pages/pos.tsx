@@ -520,37 +520,76 @@ export default function POS() {
       {/* ── RECEIPT DIALOG ── */}
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>تذكرة البيع</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>فاتورة البيع</DialogTitle></DialogHeader>
           {lastSale && (
-            <div id="receipt-print-area" className="py-2 space-y-3 bg-white text-black p-4 rounded text-sm">
-              <div className="text-center border-b pb-2">
-                <div className="text-xl font-bold">SUPERMARCHÉ</div>
-                <div className="text-xs text-gray-500">{new Date().toLocaleString("ar-DZ")}</div>
-                <div className="text-xs">الكاشير: {user?.name}</div>
+            <div id="receipt-print-area" dir="rtl" className="py-3 bg-white text-black p-5 rounded-xl text-[13px] font-mono shadow-inner">
+              {/* Header */}
+              <div className="text-center pb-3 border-b-2 border-dashed border-gray-400">
+                <div className="text-2xl font-black tracking-wide">متجر الجزائر</div>
+                <div className="text-[11px] text-gray-600 mt-1">SUPERMARCHÉ</div>
+                <div className="text-[11px] text-gray-600 mt-2">رقم الفاتورة: <span className="font-bold">#{lastSale.id ?? "—"}</span></div>
+                <div className="text-[11px] text-gray-600">{new Date().toLocaleString("ar-DZ")}</div>
+                <div className="text-[11px] text-gray-600">الكاشير: {user?.name}</div>
               </div>
-              <table className="w-full text-xs">
-                <thead><tr className="border-b"><th className="text-right">المنتج</th><th>الكمية</th><th>السعر</th><th>المبلغ</th></tr></thead>
+
+              {/* Items */}
+              <table className="w-full text-[12px] mt-3">
+                <thead>
+                  <tr className="border-b border-gray-400">
+                    <th className="text-right pb-1">المنتج</th>
+                    <th className="text-center pb-1 w-10">كمية</th>
+                    <th className="text-center pb-1 w-14">سعر</th>
+                    <th className="text-left pb-1 w-16">مجموع</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {lastSale.items?.map((item: any, i: number) => (
-                    <tr key={i} className="border-b">
-                      <td className="py-0.5">{item.productName}</td>
+                    <tr key={i} className="border-b border-dotted border-gray-300">
+                      <td className="py-1">{item.productName}</td>
                       <td className="text-center">{item.quantity}</td>
                       <td className="text-center">{item.price}</td>
-                      <td className="text-center font-bold">{item.subtotal}</td>
+                      <td className="text-left font-bold">{item.subtotal}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <div className="border-t pt-2 space-y-1">
-                <div className="flex justify-between"><span>المجموع</span><span>{lastSale.subtotal} دج</span></div>
-                {lastSale.discount > 0 && <div className="flex justify-between text-red-600"><span>خصم</span><span>- {lastSale.discount} دج</span></div>}
-                <div className="flex justify-between text-lg font-bold"><span>الإجمالي</span><span>{lastSale.total} دج</span></div>
-                <div className="text-xs text-gray-500 text-center pt-1">شكراً لزيارتكم</div>
+
+              {/* Stacked totals — clear and easy to print */}
+              <div className="border-t-2 border-dashed border-gray-400 mt-3 pt-3 space-y-1.5 text-[14px]">
+                <div className="flex justify-between">
+                  <span className="font-semibold">المجموع الفرعي</span>
+                  <span className="font-bold">{lastSale.subtotal} دج</span>
+                </div>
+                {lastSale.discount > 0 && (
+                  <div className="flex justify-between text-red-700">
+                    <span className="font-semibold">الخصم</span>
+                    <span className="font-bold">- {lastSale.discount} دج</span>
+                  </div>
+                )}
+                <div className="flex justify-between bg-gray-900 text-white px-3 py-2 rounded-lg text-lg mt-2">
+                  <span className="font-black">الإجمالي للدفع</span>
+                  <span className="font-black">{lastSale.total} دج</span>
+                </div>
+                <div className="flex justify-between pt-1 text-[12px] text-gray-700">
+                  <span>عدد المنتجات</span>
+                  <span className="font-bold">{lastSale.items?.length ?? 0}</span>
+                </div>
+                <div className="flex justify-between text-[12px] text-gray-700">
+                  <span>إجمالي القطع</span>
+                  <span className="font-bold">{lastSale.items?.reduce((a: number, x: any) => a + Number(x.quantity || 0), 0)}</span>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="text-center mt-4 pt-3 border-t-2 border-dashed border-gray-400">
+                <div className="text-base font-black">شكراً لزيارتكم 🌹</div>
+                <div className="text-[11px] text-gray-600 mt-1">نتمنى لكم يوماً سعيداً ونرحب بكم دائماً</div>
+                <div className="text-[10px] text-gray-500 mt-2">احتفظ بالفاتورة لأي استفسار</div>
               </div>
             </div>
           )}
           <DialogFooter className="gap-2">
-            <button onClick={() => window.print()} className="flex-1 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded font-bold text-sm">🖨 طباعة</button>
+            <button onClick={() => window.print()} className="flex-1 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded font-bold text-sm">🖨 طباعة الفاتورة</button>
             <button onClick={() => setReceiptOpen(false)} className="flex-1 py-2 bg-gray-200 hover:bg-gray-300 text-black rounded font-bold text-sm">إغلاق</button>
           </DialogFooter>
         </DialogContent>
