@@ -4,6 +4,61 @@ import { z } from "zod";
 
 const router: IRouter = Router();
 
+type CachedProduct = { id: number; raw: any };
+let productCache: CachedProduct[] | null = null;
+let productCacheLoadedAt = 0;
+let productCacheLoading: Promise<CachedProduct[]> | null = null;
+
+async function loadProductCache(): Promise<CachedProduct[]> {
+  if (productCacheLoading) return productCacheLoading;
+  productCacheLoading = (async () => {
+    try {
+      const snap = await firestore.collection("products").orderBy("name").get();
+      const list: CachedProduct[] = snap.docs.map((d) => ({
+        raw: d.data(),
+        id: parseInt(d.id, 10),
+      }));
+      productCache = list;
+      productCacheLoadedAt = Date.now();
+      console.log(`[products] cache loaded: ${list.length} products`);
+      return list;
+    } finally {
+      productCacheLoading = null;
+    }
+  })();
+  return productCacheLoading;
+}
+
+function invalidateProductCache() {
+  productCache = null;
+  productCacheLoadedAt = 0;
+}
+
+function upsertCacheItem(id: number, raw: any) {
+  if (!productCache) return;
+  const idx = productCache.findIndex((p) => p.id === id);
+  if (idx >= 0) productCache[idx] = { id, raw };
+  else {
+    productCache.push({ id, raw });
+    productCache.sort((a, b) =>
+      String(a.raw.name ?? "").localeCompare(String(b.raw.name ?? ""))
+    );
+  }
+}
+
+function removeCacheItem(id: number) {
+  if (!productCache) return;
+  productCache = productCache.filter((p) => p.id !== id);
+}
+
+async function getProducts(): Promise<CachedProduct[]> {
+  if (productCache) return productCache;
+  return loadProductCache();
+}
+
+// Warm cache lazily on first request; also try at startup (non-blocking).
+loadProductCache().catch((e) => console.error("[products] initial cache load failed:", e?.message ?? e));
+
 function toProduct(id: number, data: any) {
   return {
     ...data,
@@ -54,8 +109,7 @@ router.get("/products", async (req, res): Promise<void> => {
   const hasFilter = !!(search || (category && category !== "all") || lowStock === "true" || expiringSoon === "true");
   const maxLimit = parseInt(limit ?? "50", 10) || 50;
 
-  const snap = await firestore.collection("products").orderBy("name").get();
-  let products = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
+  let products = (await getProducts()).slice();
 
   if (search) {
     const s = search.toLowerCase();
@@ -84,12 +138,11 @@ router.get("/products", async (req, res): Promise<void> => {
 });
 
 router.get("/products/categories", async (_req, res): Promise<void> => {
-  const snap = await firestore.collection("products").get();
+  const products = await getProducts();
   const categories = new Set<string>();
-  snap.docs.forEach((d) => {
-    const c = d.data().category;
-    if (c) categories.add(c);
-  });
+  for (const p of products) {
+    if (p.raw.category) categories.add(p.raw.category);
+  }
   res.json(Array.from(categories).sort());
 });
 
@@ -118,32 +171,34 @@ router.post("/products", async (req, res): Promise<void> => {
     updatedAt: now,
   };
   await firestore.collection("products").doc(String(id)).set(data);
+  upsertCacheItem(id, data);
   res.status(201).json(toProduct(id, data));
 });
 
 router.get("/products/barcode/:barcode", async (req, res): Promise<void> => {
   const barcode = req.params.barcode as string;
-  const [byUnit, byCarton] = await Promise.all([
-    firestore.collection("products").where("barcode", "==", barcode).limit(1).get(),
-    firestore.collection("products").where("cartonBarcode", "==", barcode).limit(1).get(),
-  ]);
-  const doc = !byUnit.empty ? byUnit.docs[0] : !byCarton.empty ? byCarton.docs[0] : null;
-  if (!doc) {
+  const products = await getProducts();
+  const found = products.find(
+    ({ raw: p }) => p.barcode === barcode || p.cartonBarcode === barcode
+  );
+  if (!found) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;
   }
-  const p = doc.data();
+  const p = found.raw;
   const isCarton = p.cartonBarcode === barcode && p.barcode !== barcode;
-  res.json({ ...toProduct(parseInt(doc.id, 10), p), isCartonScan: isCarton });
+  res.json({ ...toProduct(found.id, p), isCartonScan: isCarton });
 });
 
 router.get("/products/:id", async (req, res): Promise<void> => {
-  const snap = await firestore.collection("products").doc(req.params.id as string).get();
-  if (!snap.exists) {
+  const idNum = parseInt(req.params.id as string, 10);
+  const products = await getProducts();
+  const found = products.find((p) => p.id === idNum);
+  if (!found) {
     res.status(404).json({ error: "المنتج غير موجود" });
     return;
   }
-  res.json(toProduct(parseInt(snap.id, 10), snap.data()!));
+  res.json(toProduct(found.id, found.raw));
 });
 
 router.patch("/products/:id", async (req, res): Promise<void> => {
@@ -194,8 +249,9 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
   if (d.unitWholesalePrice != null) updates.unitWholesalePrice = d.unitWholesalePrice.toString();
 
   await firestore.collection("products").doc(id).update(updates);
-  const updated = await firestore.collection("products").doc(id).get();
-  res.json(toProduct(parseInt(updated.id, 10), updated.data()!));
+  const merged = { ...existing, ...updates };
+  upsertCacheItem(parseInt(id, 10), merged);
+  res.json(toProduct(parseInt(id, 10), merged));
 });
 
 router.post("/products/:id/restock", async (req, res): Promise<void> => {
@@ -223,8 +279,9 @@ router.post("/products/:id/restock", async (req, res): Promise<void> => {
     updatedAt: new Date(),
   };
   await firestore.collection("products").doc(id).update(updates);
-  const updated = await firestore.collection("products").doc(id).get();
-  res.json(toProduct(parseInt(updated.id, 10), updated.data()!));
+  const merged = { ...product, ...updates };
+  upsertCacheItem(parseInt(id, 10), merged);
+  res.json(toProduct(parseInt(id, 10), merged));
 });
 
 const AddStockBody = z.object({
@@ -259,19 +316,22 @@ router.post("/products/:id/add-stock", async (req, res): Promise<void> => {
   };
   if (supplier && supplier.trim()) updates.supplier = supplier.trim();
   await ref.update(updates);
-  const updated = await ref.get();
-  res.json(toProduct(parseInt(updated.id, 10), updated.data()!));
+  const merged = { ...p, ...updates };
+  upsertCacheItem(parseInt(id, 10), merged);
+  res.json(toProduct(parseInt(id, 10), merged));
 });
 
 router.delete("/products/:id", async (req, res): Promise<void> => {
   const id = req.params.id as string;
-  const snap = await firestore.collection("products").doc(id).get();
-  if (!snap.exists) {
-    res.status(404).json({ error: "المنتج غير موجود" });
-    return;
-  }
   await firestore.collection("products").doc(id).delete();
+  removeCacheItem(parseInt(id, 10));
   res.sendStatus(204);
+});
+
+router.post("/products/cache/refresh", async (_req, res): Promise<void> => {
+  invalidateProductCache();
+  const list = await loadProductCache();
+  res.json({ count: list.length });
 });
 
 export default router;
