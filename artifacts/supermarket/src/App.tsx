@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/layout/Layout";
+import { InstallPrompt } from "@/components/install-prompt";
 
 import Login from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
@@ -143,6 +144,7 @@ function App() {
           </AuthProvider>
         </WouterRouter>
         <Toaster />
+        <InstallPrompt />
       </TooltipProvider>
     </QueryClientProvider>
   );

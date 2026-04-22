@@ -28,6 +28,25 @@ A full-stack Algerian Supermarket Management System with RBAC, Arabic RTL UI, on
 - **Staff Operations**: Employee account management, task approval workflow, expense tracking, advances/penalties, and payroll summaries
 - **Dashboard Analytics**: Sales charts, top products, low stock alerts
 - **Arabic RTL UI**: Full right-to-left, Tajawal font, dark mode by default, DZD currency
+- **PWA + Native-Ready**: Installable Progressive Web App (manifest, service worker, offline cache via `vite-plugin-pwa`); Capacitor configured for native Android/iOS builds (`pnpm --filter @workspace/supermarket cap:add:android` / `cap:add:ios`)
+- **In-Memory Product Cache**: API server caches all products in memory after first Firestore load to keep search/listing instant and minimize Firestore reads (auto-invalidated on writes)
+
+## Mobile App (Android / iOS) Build
+
+Capacitor wraps the web app into native shells. Native builds require local dev tools (Android Studio for Android, Xcode for iOS) — they cannot be built on Replit but the project is fully configured.
+
+From a local machine after cloning the repo:
+
+```
+pnpm install
+pnpm --filter @workspace/supermarket cap:add:android   # one-time
+pnpm --filter @workspace/supermarket cap:add:ios       # one-time, macOS only
+pnpm --filter @workspace/supermarket cap:sync          # rebuild + sync after code changes
+pnpm --filter @workspace/supermarket cap:open:android  # opens Android Studio
+pnpm --filter @workspace/supermarket cap:open:ios      # opens Xcode
+```
+
+App identity: `com.supermarket.algeria` / "السوبرماركت" (configured in `capacitor.config.ts`).
 
 ## User Preferences
 
