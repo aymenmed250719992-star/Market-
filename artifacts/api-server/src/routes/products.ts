@@ -227,6 +227,42 @@ router.post("/products/:id/restock", async (req, res): Promise<void> => {
   res.json(toProduct(parseInt(updated.id, 10), updated.data()!));
 });
 
+const AddStockBody = z.object({
+  quantity: z.number().positive(),
+  location: z.enum(["shelf", "warehouse"]).default("shelf"),
+  supplier: z.string().optional(),
+});
+
+router.post("/products/:id/add-stock", async (req, res): Promise<void> => {
+  const id = req.params.id as string;
+  const parsed = AddStockBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "بيانات غير صحيحة" });
+    return;
+  }
+  const { quantity, location, supplier } = parsed.data;
+  const ref = firestore.collection("products").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    res.status(404).json({ error: "المنتج غير موجود" });
+    return;
+  }
+  const p = snap.data()!;
+  const currentShelf = Number(p.shelfStock ?? 0);
+  const currentWarehouse = Number(p.warehouseStock ?? 0);
+  const currentTotal = Number(p.stock ?? currentShelf + currentWarehouse);
+  const updates: Record<string, unknown> = {
+    stock: currentTotal + quantity,
+    shelfStock: location === "shelf" ? currentShelf + quantity : currentShelf,
+    warehouseStock: location === "warehouse" ? currentWarehouse + quantity : currentWarehouse,
+    updatedAt: new Date(),
+  };
+  if (supplier && supplier.trim()) updates.supplier = supplier.trim();
+  await ref.update(updates);
+  const updated = await ref.get();
+  res.json(toProduct(parseInt(updated.id, 10), updated.data()!));
+});
+
 router.delete("/products/:id", async (req, res): Promise<void> => {
   const id = req.params.id as string;
   const snap = await firestore.collection("products").doc(id).get();

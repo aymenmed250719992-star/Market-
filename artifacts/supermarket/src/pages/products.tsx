@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Edit, Trash2, AlertTriangle, Package, Camera } from "lucide-react";
+import { Plus, Search, Edit, Trash2, AlertTriangle, Package, Camera, PackagePlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format, differenceInDays } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -143,16 +143,62 @@ export default function Products() {
 
   const handleRestock = async () => {
     try {
+      const cartonsToMove = parseInt(restockCartons);
+      if (!cartonsToMove || cartonsToMove <= 0) throw new Error("الكمية غير صحيحة");
       const res = await fetch(`/api/products/${restockProduct.id}/restock`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cartons: parseInt(restockCartons) }),
+        body: JSON.stringify({ cartonsToMove }),
         credentials: "include"
       });
-      if (!res.ok) throw new Error("Failed to restock");
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "تعذّر نقل المخزون");
+      }
       toast({ title: "تم النقل", description: "تم نقل المخزون للرف بنجاح" });
       queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
       setRestockModalOpen(false);
+      setRestockCartons("");
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "خطأ", description: error.message });
+    }
+  };
+
+  const [addStockOpen, setAddStockOpen] = useState(false);
+  const [addStockProduct, setAddStockProduct] = useState<any>(null);
+  const [addStockQty, setAddStockQty] = useState("");
+  const [addStockLocation, setAddStockLocation] = useState<"shelf" | "warehouse">("shelf");
+  const [addStockSupplier, setAddStockSupplier] = useState("");
+
+  const openAddStock = (product: any) => {
+    setAddStockProduct(product);
+    setAddStockQty("");
+    setAddStockLocation("shelf");
+    setAddStockSupplier(product.supplier ?? "");
+    setAddStockOpen(true);
+  };
+
+  const handleAddStock = async () => {
+    try {
+      const quantity = parseFloat(addStockQty);
+      if (!quantity || quantity <= 0) throw new Error("أدخل كمية صحيحة");
+      const res = await fetch(`/api/products/${addStockProduct.id}/add-stock`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quantity,
+          location: addStockLocation,
+          supplier: addStockSupplier.trim() || undefined,
+        }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "تعذّر إضافة الكمية");
+      }
+      toast({ title: "تمت الإضافة", description: `تمت إضافة ${quantity} للمخزون` });
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+      setAddStockOpen(false);
     } catch (error: any) {
       toast({ variant: "destructive", title: "خطأ", description: error.message });
     }
@@ -319,12 +365,17 @@ export default function Products() {
                     <TableCell className="text-left">
                       <div className="flex justify-end gap-2">
                         {canEdit && (
-                          <Button variant="ghost" size="icon" onClick={() => handleOpenModal(product)} data-testid={`button-edit-product-${product.id}`}>
+                          <Button variant="ghost" size="icon" title="إضافة كمية" onClick={() => openAddStock(product)} data-testid={`button-add-stock-${product.id}`}>
+                            <PackagePlus className="h-4 w-4 text-emerald-500" />
+                          </Button>
+                        )}
+                        {canEdit && (
+                          <Button variant="ghost" size="icon" title="تعديل" onClick={() => handleOpenModal(product)} data-testid={`button-edit-product-${product.id}`}>
                             <Edit className="h-4 w-4 text-primary" />
                           </Button>
                         )}
                         {canDelete && (
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(product.id)} data-testid={`button-delete-product-${product.id}`}>
+                          <Button variant="ghost" size="icon" title="حذف" onClick={() => handleDelete(product.id)} data-testid={`button-delete-product-${product.id}`}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         )}
@@ -429,6 +480,61 @@ export default function Products() {
         onClose={() => setScanSearchOpen(false)}
         onDetected={(code) => { setSearch(code); setScanSearchOpen(false); }}
       />
+
+      <Dialog open={addStockOpen} onOpenChange={setAddStockOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>إضافة كمية للمخزون</DialogTitle>
+          </DialogHeader>
+          {addStockProduct && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-secondary/50 p-3">
+                <div className="font-bold">{addStockProduct.name}</div>
+                <div className="text-xs text-muted-foreground">باركود: {addStockProduct.barcode || "-"}</div>
+                <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                  <div>الرف الحالي: <span className="font-bold">{addStockProduct.shelfStock ?? 0}</span></div>
+                  <div>المستودع الحالي: <span className="font-bold">{addStockProduct.warehouseStock ?? 0}</span></div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>الكمية المضافة</Label>
+                <Input type="number" min="1" inputMode="numeric" value={addStockQty} onChange={(e) => setAddStockQty(e.target.value)} data-testid="input-add-stock-qty" />
+              </div>
+              <div className="space-y-2">
+                <Label>الموقع</Label>
+                <Select value={addStockLocation} onValueChange={(v) => setAddStockLocation(v as "shelf" | "warehouse")}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="shelf">الرف</SelectItem>
+                    <SelectItem value="warehouse">المستودع</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>اسم المورد (اختياري)</Label>
+                <Input value={addStockSupplier} onChange={(e) => setAddStockSupplier(e.target.value)} placeholder="اتركه فارغاً للإبقاء" data-testid="input-add-stock-supplier" />
+              </div>
+              {(() => {
+                const q = parseFloat(addStockQty) || 0;
+                const newShelf = (addStockProduct.shelfStock ?? 0) + (addStockLocation === "shelf" ? q : 0);
+                const newWh = (addStockProduct.warehouseStock ?? 0) + (addStockLocation === "warehouse" ? q : 0);
+                const newTotal = newShelf + newWh;
+                return (
+                  <div className="rounded-lg border border-border p-3 text-sm space-y-1">
+                    <div className="flex justify-between"><span>الرف بعد الإضافة</span><span className="font-bold">{newShelf}</span></div>
+                    <div className="flex justify-between"><span>المستودع بعد الإضافة</span><span className="font-bold">{newWh}</span></div>
+                    <div className="flex justify-between text-base"><span>الإجمالي الجديد</span><span className="font-bold text-primary">{newTotal}</span></div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddStockOpen(false)}>إلغاء</Button>
+            <Button onClick={handleAddStock} data-testid="button-confirm-add-stock">تأكيد الإضافة</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
