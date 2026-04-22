@@ -282,6 +282,10 @@ export default function Tasks() {
 }
 
 function CreateTaskModal({ open, onOpenChange, onSubmit, users, isLoading }: any) {
+  const roleLabels: Record<string, string> = {
+    worker: "عامل",
+    buyer: "مشتري",
+  };
   const [formData, setFormData] = useState({
     title: "",
     description: "",
