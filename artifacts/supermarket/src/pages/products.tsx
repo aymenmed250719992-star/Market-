@@ -31,13 +31,16 @@ export default function Products() {
   }, [search]);
 
   const hasFilter = debouncedSearch.length > 0 || category !== "all";
-  const { data: products, isLoading } = useListProducts(
-    {
-      search: debouncedSearch || undefined,
-      category: category !== "all" ? category : undefined,
+  const productsParams = {
+    search: debouncedSearch || undefined,
+    category: category !== "all" ? category : undefined,
+  };
+  const { data: products, isLoading } = useListProducts(productsParams, {
+    query: {
+      enabled: hasFilter,
+      queryKey: getListProductsQueryKey(productsParams),
     },
-    { query: { enabled: hasFilter } },
-  );
+  });
 
   const { data: categoriesList = [] } = useQuery<string[]>({
     queryKey: ["product-categories"],
