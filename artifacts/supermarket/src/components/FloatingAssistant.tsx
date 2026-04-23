@@ -7,7 +7,29 @@ interface ChatMessage {
   text: string;
   products?: any[];
   provider?: string;
+  executedTools?: { name: string; ok: boolean }[];
 }
+
+const TOOL_LABELS: Record<string, string> = {
+  search_products: "بحث منتجات",
+  get_product: "جلب منتج",
+  list_low_stock: "مخزون منخفض",
+  list_expiring: "صلاحية قريبة",
+  inventory_overview: "نظرة عامة المخزون",
+  sales_summary: "ملخص المبيعات",
+  search_customers: "بحث زبائن",
+  list_pending_tasks: "مهام معلّقة",
+  list_employees: "الموظفون",
+  list_online_orders: "الطلبيات الإلكترونية",
+  update_product: "تعديل منتج",
+  create_product: "إضافة منتج",
+  delete_product: "حذف منتج",
+  restock_product: "نقل من المستودع",
+  create_task: "إنشاء مهمة",
+  create_customer: "إضافة زبون",
+  record_customer_payment: "تسجيل دفعة",
+  create_expense: "تسجيل مصروف",
+};
 
 const HIDE_KEY = "assistant.hidden";
 const OPEN_KEY = "assistant.open";
@@ -35,20 +57,21 @@ export function FloatingAssistant() {
     setQuery("");
     setLoading(true);
     try {
+      const history = chat.map((m) => ({ role: m.role === "ai" ? "assistant" : "user", content: m.text }));
       const res = await fetch("/api/ai/inventory-query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           question: q,
-          createTaskIfNeeded: user.role === "admin" || user.role === "buyer" || user.role === "cashier",
+          history,
           requesterId: user.id,
           requesterName: user.name,
           role: user.role,
         }),
       });
       const data = await res.json();
-      setChat((p) => [...p, { role: "ai", text: data.answer ?? "—", products: data.products, provider: data.provider }]);
+      setChat((p) => [...p, { role: "ai", text: data.answer ?? "—", products: data.products, provider: data.provider, executedTools: data.executedTools }]);
     } catch {
       setChat((p) => [...p, { role: "ai", text: "تعذّر الاتصال بالمساعد. حاول مجدداً." }]);
     } finally {
@@ -137,6 +160,15 @@ export function FloatingAssistant() {
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div className={`px-3 py-2 rounded-2xl max-w-[88%] text-xs whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"}`}>
               {m.text}
+              {m.executedTools && m.executedTools.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {m.executedTools.map((t, j) => (
+                    <span key={j} className={`text-[10px] px-1.5 py-0.5 rounded ${t.ok ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" : "bg-rose-500/20 text-rose-700 dark:text-rose-300"}`}>
+                      {t.ok ? "✓" : "✕"} {TOOL_LABELS[t.name] ?? t.name}
+                    </span>
+                  ))}
+                </div>
+              )}
               {m.products && m.products.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {m.products.slice(0, 5).map((p: any) => (
