@@ -48,6 +48,29 @@ Thumbs.db
 .cache/
 .local/
 artifacts/api-server/.data/
+
+# Secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+firebase-service-account*.json
+service-account*.json
+google-credentials*.json
+secrets/
+.replit
+replit.nix
+
+# Logs
+*.log
+logs/
+
+# Build outputs
+build/
+.next/
+.turbo/
+*.local
 *firebase-adminsdk*.json
 *serviceAccount*.json
 *service-account*.json

@@ -21,6 +21,7 @@ import loyaltyRouter from "./loyalty";
 import returnsRouter from "./returns";
 import analyticsRouter from "./analytics";
 import priceSuggestionsRouter from "./price-suggestions";
+import stockoutPredictionRouter from "./stockout-prediction";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(loyaltyRouter);
 router.use(returnsRouter);
 router.use(analyticsRouter);
 router.use(priceSuggestionsRouter);
+router.use(stockoutPredictionRouter);
 
 export default router;

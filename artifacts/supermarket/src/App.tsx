@@ -28,6 +28,7 @@ import Backup from "@/pages/backup";
 import Returns from "@/pages/returns";
 import Analytics from "@/pages/analytics";
 import PriceSuggestions from "@/pages/price-suggestions";
+import StockoutPrediction from "@/pages/stockout-prediction";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
 
@@ -144,6 +145,9 @@ function Router() {
       </Route>
       <Route path="/price-suggestions">
         <ProtectedRoute component={PriceSuggestions} roles={["admin"]} />
+      </Route>
+      <Route path="/stockout-prediction">
+        <ProtectedRoute component={StockoutPrediction} roles={["admin", "buyer"]} />
       </Route>
       <Route>
         <Layout>

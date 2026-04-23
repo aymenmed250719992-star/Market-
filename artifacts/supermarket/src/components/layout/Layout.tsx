@@ -26,6 +26,7 @@ import {
   Database,
   BarChart3,
   Lightbulb,
+  TrendingDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
@@ -69,6 +70,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/reports", label: "التقارير", icon: History, roles: ["admin", "cashier"] },
     { href: "/analytics", label: "تحليلات ذكية", icon: BarChart3, roles: ["admin"] },
     { href: "/price-suggestions", label: "اقتراحات الأسعار", icon: Lightbulb, roles: ["admin"] },
+    { href: "/stockout-prediction", label: "توقع نفاد المخزون", icon: TrendingDown, roles: ["admin", "buyer"] },
     { href: "/audit", label: "سجل التدقيق", icon: ScrollText, roles: ["admin"] },
     { href: "/backup", label: "النسخ الاحتياطي", icon: Database, roles: ["admin"] },
   ];
