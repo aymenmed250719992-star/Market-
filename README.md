@@ -25,7 +25,7 @@
 ### المتطلبات
 - Node.js ≥ 20
 - pnpm ≥ 9
-- مشروع Firebase (Firestore + Service Account)
+- PostgreSQL (متغير `DATABASE_URL`) — Replit يوفّرها مجاناً
 
 ### الخطوات
 
@@ -35,7 +35,7 @@ pnpm install
 
 # 2) أنشئ ملف البيئة من القالب
 cp .env.example .env
-# ثم عبّئ القيم (FIREBASE_SERVICE_ACCOUNT و مفاتيح AI)
+# ثم عبّئ DATABASE_URL ومفاتيح AI (اختيارية)
 
 # 3) شغّل API + الواجهة (في تيرمنالين منفصلين)
 pnpm --filter @workspace/api-server dev
@@ -56,9 +56,14 @@ lib/
   api-client-react/ # عميل مولّد
 ```
 
-## 🔄 الترحيل المستقبلي إلى PostgreSQL
+## 🗄️ قاعدة البيانات
 
-البنية الحالية تستخدم Firebase Firestore مع طبقة Cache في الذاكرة. كل المنطق مفصول في `artifacts/api-server/src/lib/cache.ts` و`firebase.ts` — يمكن استبدالهم بـ Drizzle + PostgreSQL دون تغيير منطق أي route.
+التطبيق يعمل على **PostgreSQL** (جداول JSONB) مع طبقة Cache في الذاكرة للأداء:
+- `coll_users`, `coll_products`, `coll_customers`, `coll_sales` ... (15+ جدول)
+- `coll_counters` للمعرّفات التلقائية الذرية
+- البذر التلقائي: المسؤول الافتراضي و 17,800+ منتج عند أول تشغيل
+
+سابقاً كان Firebase Firestore — تم الترحيل بطبقة ترجمة في `lib/firebase.ts` تحافظ على نفس الواجهة لكنها تكتب إلى PostgreSQL.
 
 ## 🔐 ملاحظات أمنية
 

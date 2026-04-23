@@ -1,4 +1,4 @@
-import { firestore, FieldValue } from "./firebase";
+import { firestore, FieldValue, seedReady } from "./firebase";
 
 /**
  * Generic in-memory cache for a Firestore collection.
@@ -14,16 +14,19 @@ export class CollectionCache {
   private loading: Promise<Map<number, any>> | null = null;
 
   constructor(public readonly name: string) {
-    // warm cache on construction (non-blocking)
-    this.load().catch((e) =>
-      console.error(`[cache:${this.name}] initial load failed:`, e?.message ?? e),
-    );
+    // warm cache on construction (non-blocking) — wait for seed to complete first
+    seedReady
+      .then(() => this.load())
+      .catch((e) =>
+        console.error(`[cache:${this.name}] initial load failed:`, e?.message ?? e),
+      );
   }
 
   private async load(): Promise<Map<number, any>> {
     if (this.loading) return this.loading;
     this.loading = (async () => {
       try {
+        await seedReady;
         const snap = await firestore.collection(this.name).get();
         const m = new Map<number, any>();
         for (const doc of snap.docs) {
