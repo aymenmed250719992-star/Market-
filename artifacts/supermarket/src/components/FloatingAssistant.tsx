@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, X, EyeOff, Send, Sparkles } from "lucide-react";
+import { Bot, X, EyeOff, Send, Sparkles, Mic, MicOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface ChatMessage {
@@ -41,7 +41,39 @@ export function FloatingAssistant() {
   const [query, setQuery] = useState("");
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [listening, setListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const SR: any = (typeof window !== "undefined") && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  const voiceSupported = !!SR;
+
+  const startListening = () => {
+    if (!SR || listening) return;
+    try {
+      const rec = new SR();
+      rec.lang = "ar-SA";
+      rec.interimResults = true;
+      rec.continuous = false;
+      rec.onresult = (e: any) => {
+        let transcript = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+        setQuery(transcript);
+      };
+      rec.onerror = () => setListening(false);
+      rec.onend = () => setListening(false);
+      recognitionRef.current = rec;
+      rec.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+
+  const stopListening = () => {
+    try { recognitionRef.current?.stop(); } catch {}
+    setListening(false);
+  };
 
   useEffect(() => { localStorage.setItem(HIDE_KEY, hidden ? "1" : "0"); }, [hidden]);
   useEffect(() => { localStorage.setItem(OPEN_KEY, open ? "1" : "0"); }, [open]);
@@ -193,11 +225,22 @@ export function FloatingAssistant() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="اكتب سؤالك..."
+          placeholder={listening ? "أتحدث الآن..." : "اكتب أو تكلم..."}
           className="flex-1 bg-muted/40 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary"
           dir="rtl"
           data-testid="input-assistant-query"
         />
+        {voiceSupported && (
+          <button
+            type="button"
+            onClick={listening ? stopListening : startListening}
+            title={listening ? "إيقاف التسجيل" : "إدخال صوتي"}
+            className={`h-9 w-9 rounded-lg flex items-center justify-center ${listening ? "bg-rose-500 text-white animate-pulse" : "bg-muted text-foreground hover:bg-muted/70"}`}
+            data-testid="button-voice-assistant"
+          >
+            {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </button>
+        )}
         <button type="submit" disabled={loading || !query.trim()} className="h-9 w-9 rounded-lg bg-primary text-primary-foreground flex items-center justify-center disabled:opacity-50">
           <Send className="h-4 w-4" />
         </button>
