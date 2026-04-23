@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { nextId, tsToDate } from "../lib/firebase";
+import { distributorOffersCache, usersCache } from "../lib/cache";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -22,9 +23,9 @@ async function getCurrentUser(req: Request) {
   if (!token) return null;
   try {
     const payload = JSON.parse(Buffer.from(token, "base64").toString());
-    const snap = await firestore.collection("users").doc(String(payload.id)).get();
-    if (!snap.exists) return null;
-    return { ...snap.data()!, id: parseInt(snap.id, 10) };
+    const data = await usersCache.get(payload.id);
+    if (!data) return null;
+    return { ...data, id: payload.id };
   } catch {
     return null;
   }
@@ -42,12 +43,12 @@ function toOffer(id: number, data: any) {
 
 router.get("/distributor-offers", async (req, res): Promise<void> => {
   const user = await getCurrentUser(req);
-  const snap = await firestore.collection("distributor_offers").orderBy("createdAt", "desc").get();
-  let offers = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
+  let offers = await distributorOffersCache.all();
+  offers.sort((a, b) => +tsToDate(b.data.createdAt) - +tsToDate(a.data.createdAt));
   if (req.query.mine === "true" && user) {
-    offers = offers.filter(({ raw }) => raw.distributorId === user.id);
+    offers = offers.filter(({ data }) => data.distributorId === user.id);
   }
-  res.json(offers.map(({ raw, id }) => toOffer(id, raw)));
+  res.json(offers.map(({ id, data }) => toOffer(id, data)));
 });
 
 router.post("/distributor-offers", async (req, res): Promise<void> => {
@@ -73,7 +74,7 @@ router.post("/distributor-offers", async (req, res): Promise<void> => {
     createdAt: now,
     updatedAt: now,
   };
-  await firestore.collection("distributor_offers").doc(String(id)).set(data);
+  await distributorOffersCache.set(id, data);
   res.status(201).json(toOffer(id, data));
 });
 
@@ -84,13 +85,12 @@ router.patch("/distributor-offers/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const id = req.params.id as string;
-  const snap = await firestore.collection("distributor_offers").doc(id).get();
-  if (!snap.exists) {
+  const idNum = parseInt(req.params.id as string, 10);
+  const existing = await distributorOffersCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "العرض غير موجود" });
     return;
   }
-  const existing = snap.data()!;
   if (user.role !== "admin" && existing.distributorId !== user.id) {
     res.status(403).json({ error: "غير مسموح بتعديل هذا العرض" });
     return;
@@ -105,9 +105,8 @@ router.patch("/distributor-offers/:id", async (req, res): Promise<void> => {
   const updates: Record<string, unknown> = { ...parsed.data, updatedAt: new Date() };
   if (parsed.data.wholesalePrice !== undefined) updates.wholesalePrice = parsed.data.wholesalePrice.toString();
 
-  await firestore.collection("distributor_offers").doc(id).update(updates);
-  const updated = await firestore.collection("distributor_offers").doc(id).get();
-  res.json(toOffer(parseInt(updated.id, 10), updated.data()!));
+  const merged = await distributorOffersCache.update(idNum, updates);
+  res.json(toOffer(idNum, merged ?? { ...existing, ...updates }));
 });
 
 export default router;

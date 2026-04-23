@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { nextId, tsToDate } from "../lib/firebase";
+import { customersCache } from "../lib/cache";
 import { CreateCustomerBody, UpdateCustomerBody, PayCustomerDebtBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -16,8 +17,9 @@ function toCustomer(id: number, data: any) {
 }
 
 router.get("/customers", async (_req, res): Promise<void> => {
-  const snap = await firestore.collection("customers").orderBy("name").get();
-  res.json(snap.docs.map((d) => toCustomer(parseInt(d.id, 10), d.data())));
+  const all = await customersCache.all();
+  all.sort((a, b) => String(a.data.name ?? "").localeCompare(String(b.data.name ?? "")));
+  res.json(all.map(({ id, data }) => toCustomer(id, data)));
 });
 
 router.post("/customers", async (req, res): Promise<void> => {
@@ -35,28 +37,29 @@ router.post("/customers", async (req, res): Promise<void> => {
     createdAt: now,
     updatedAt: now,
   };
-  await firestore.collection("customers").doc(String(id)).set(data);
+  await customersCache.set(id, data);
   res.status(201).json(toCustomer(id, data));
 });
 
 router.get("/customers/:id", async (req, res): Promise<void> => {
-  const snap = await firestore.collection("customers").doc(req.params.id as string).get();
-  if (!snap.exists) {
+  const idNum = parseInt(req.params.id as string, 10);
+  const data = await customersCache.get(idNum);
+  if (!data) {
     res.status(404).json({ error: "Customer not found" });
     return;
   }
-  res.json(toCustomer(parseInt(snap.id, 10), snap.data()!));
+  res.json(toCustomer(idNum, data));
 });
 
 router.patch("/customers/:id", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
+  const idNum = parseInt(req.params.id as string, 10);
   const parsed = UpdateCustomerBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const snap = await firestore.collection("customers").doc(id).get();
-  if (!snap.exists) {
+  const existing = await customersCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "Customer not found" });
     return;
   }
@@ -67,28 +70,25 @@ router.patch("/customers/:id", async (req, res): Promise<void> => {
   if (d.address !== undefined) updates.address = d.address ?? null;
   if (d.creditLimit != null) updates.creditLimit = d.creditLimit.toString();
 
-  await firestore.collection("customers").doc(id).update(updates);
-  const updated = await firestore.collection("customers").doc(id).get();
-  res.json(toCustomer(parseInt(updated.id, 10), updated.data()!));
+  const merged = await customersCache.update(idNum, updates);
+  res.json(toCustomer(idNum, merged ?? { ...existing, ...updates }));
 });
 
 router.post("/customers/:id/pay-debt", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
+  const idNum = parseInt(req.params.id as string, 10);
   const parsed = PayCustomerDebtBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const snap = await firestore.collection("customers").doc(id).get();
-  if (!snap.exists) {
+  const customer = await customersCache.get(idNum);
+  if (!customer) {
     res.status(404).json({ error: "Customer not found" });
     return;
   }
-  const customer = snap.data()!;
   const newDebt = Math.max(0, parseFloat(customer.totalDebt) - parsed.data.amount);
-  await firestore.collection("customers").doc(id).update({ totalDebt: newDebt.toString(), updatedAt: new Date() });
-  const updated = await firestore.collection("customers").doc(id).get();
-  res.json(toCustomer(parseInt(updated.id, 10), updated.data()!));
+  const merged = await customersCache.update(idNum, { totalDebt: newDebt.toString(), updatedAt: new Date() });
+  res.json(toCustomer(idNum, merged ?? { ...customer, totalDebt: newDebt.toString() }));
 });
 
 export default router;

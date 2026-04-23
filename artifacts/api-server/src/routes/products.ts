@@ -59,6 +59,37 @@ async function getProducts(): Promise<CachedProduct[]> {
 // Warm cache lazily on first request; also try at startup (non-blocking).
 loadProductCache().catch((e) => console.error("[products] initial cache load failed:", e?.message ?? e));
 
+/**
+ * Public API for other route modules (sales, online-orders, dashboard) to read/update
+ * products from the same in-memory cache, avoiding extra Firestore reads/writes.
+ */
+export const productsCacheApi = {
+  async get(id: number): Promise<any | undefined> {
+    const list = await getProducts();
+    return list.find((p) => p.id === id)?.raw;
+  },
+  async all(): Promise<Array<{ id: number; raw: any }>> {
+    return (await getProducts()).slice();
+  },
+  async update(id: number, updates: Record<string, any>): Promise<any | undefined> {
+    await firestore.collection("products").doc(String(id)).update(updates);
+    const list = await getProducts();
+    const item = list.find((p) => p.id === id);
+    if (!item) return undefined;
+    const merged: any = { ...item.raw };
+    for (const [k, v] of Object.entries(updates)) {
+      const anyV = v as any;
+      if (anyV && typeof anyV === "object" && typeof anyV.operand === "number") {
+        merged[k] = (Number(merged[k] ?? 0) || 0) + anyV.operand;
+      } else {
+        merged[k] = v;
+      }
+    }
+    upsertCacheItem(id, merged);
+    return merged;
+  },
+};
+
 function toProduct(id: number, data: any) {
   return {
     ...data,

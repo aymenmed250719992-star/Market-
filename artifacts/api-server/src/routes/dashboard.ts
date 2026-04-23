@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
-import { firestore, tsToDate } from "../lib/firebase";
+import { tsToDate } from "../lib/firebase";
+import { salesCache, customersCache, shortagesCache, expensesCache, advancesCache } from "../lib/cache";
+import { productsCacheApi } from "./products";
 
 const router: IRouter = Router();
 
@@ -11,24 +13,19 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   const currentMonth = todayDate.slice(0, 7);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  const [salesSnap, productsSnap, customersSnap, shortagesSnap, expensesSnap, advancesSnap] = await Promise.all([
-    firestore.collection("sales").get(),
-    firestore.collection("products").get(),
-    firestore.collection("customers").get(),
-    firestore.collection("shortages").get(),
-    firestore.collection("expenses").get(),
-    firestore.collection("advances").get(),
+  const [allSales, productList, customers, shortages, expenses, advances] = await Promise.all([
+    salesCache.all(),
+    productsCacheApi.all(),
+    customersCache.all(),
+    shortagesCache.all(),
+    expensesCache.all(),
+    advancesCache.all(),
   ]);
 
-  const allSales = salesSnap.docs.map((d) => d.data());
-  const products = productsSnap.docs.map((d) => ({ ...d.data(), id: parseInt(d.id, 10) }));
-  const customers = customersSnap.docs.map((d) => d.data());
-  const shortages = shortagesSnap.docs.map((d) => d.data());
-  const expenses = expensesSnap.docs.map((d) => d.data());
-  const advances = advancesSnap.docs.map((d) => d.data());
+  const products = productList.map((p) => ({ ...p.raw, id: p.id }));
 
-  const todaySalesList = allSales.filter((s) => tsToDate(s.createdAt) >= today);
-  const monthSalesList = allSales.filter((s) => tsToDate(s.createdAt) >= monthStart);
+  const todaySalesList = allSales.filter(({ data: s }) => tsToDate(s.createdAt) >= today).map((s) => s.data);
+  const monthSalesList = allSales.filter(({ data: s }) => tsToDate(s.createdAt) >= monthStart).map((s) => s.data);
 
   const todayRevenue = todaySalesList.reduce((sum, s) => sum + parseFloat(s.total), 0);
   const monthRevenue = monthSalesList.reduce((sum, s) => sum + parseFloat(s.total), 0);
@@ -49,7 +46,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   }
 
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const monthExpenses = expenses.filter((e) => e.month === currentMonth);
+  const monthExpenses = expenses.filter(({ data: e }) => e.month === currentMonth).map((x) => x.data);
   const totalDailyExpenses = monthExpenses.reduce((sum, e) => {
     if (e.type === "one_time") return sum;
     const daily = e.dailyAmount ? parseFloat(e.dailyAmount) : parseFloat(e.amount) / (e.daysInMonth ?? daysInMonth);
@@ -57,7 +54,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   }, 0);
   const monthTotalExpenses = monthExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
-  const monthAdvances = advances.filter((a) => a.month === currentMonth);
+  const monthAdvances = advances.filter(({ data: a }) => a.month === currentMonth).map((x) => x.data);
   const totalAdvances = monthAdvances.filter((a) => a.type === "advance").reduce((s, a) => s + parseFloat(a.amount), 0);
   const totalPenalties = monthAdvances.filter((a) => a.type === "penalty").reduce((s, a) => s + parseFloat(a.amount), 0);
 
@@ -76,7 +73,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     todayGrossProfit -= parseFloat(sale.discount);
   }
   const todayNetProfit = todayGrossProfit - totalDailyExpenses;
-  const totalDebt = customers.reduce((sum, c) => sum + parseFloat(c.totalDebt), 0);
+  const totalDebt = customers.reduce((sum, { data: c }) => sum + parseFloat(c.totalDebt), 0);
 
   res.json({
     todaySales: todaySalesList.length,
@@ -87,7 +84,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     lowWarehouseCount: products.filter((p) => p.warehouseStock <= (p.lowWarehouseThreshold ?? 2)).length,
     expiringCount: products.filter((p) => p.expiryDate && p.expiryDate >= todayDate && p.expiryDate <= soonDate).length,
     totalDebt,
-    pendingShortages: shortages.filter((s) => s.status === "pending").length,
+    pendingShortages: shortages.filter(({ data: s }) => s.status === "pending").length,
     monthRevenue,
     monthGrossProfit,
     monthNetProfit,
@@ -100,8 +97,8 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
 });
 
 router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
-  const productsSnap = await firestore.collection("products").get();
-  const products = productsSnap.docs.map((d) => ({ ...d.data(), id: parseInt(d.id, 10) }));
+  const productList = await productsCacheApi.all();
+  const products = productList.map((p) => ({ ...p.raw, id: p.id }));
 
   const days: Record<string, { revenue: number; profit: number; netProfit: number; count: number }> = {};
   for (let i = 6; i >= 0; i--) {
@@ -114,8 +111,8 @@ router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
   since.setDate(since.getDate() - 6);
   since.setHours(0, 0, 0, 0);
 
-  const salesSnap = await firestore.collection("sales").get();
-  const recent = salesSnap.docs.map((d) => d.data()).filter((s) => tsToDate(s.createdAt) >= since);
+  const allSales = await salesCache.all();
+  const recent = allSales.map((s) => s.data).filter((s) => tsToDate(s.createdAt) >= since);
 
   for (const sale of recent) {
     const key = tsToDate(sale.createdAt).toISOString().slice(0, 10);
@@ -134,8 +131,8 @@ router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
   }
 
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const expensesSnap = await firestore.collection("expenses").get();
-  const monthExpenses = expensesSnap.docs.map((d) => d.data()).filter((e) => e.month === currentMonth);
+  const allExpenses = await expensesCache.all();
+  const monthExpenses = allExpenses.map((e) => e.data).filter((e) => e.month === currentMonth);
   const totalDailyExpenses = monthExpenses.reduce((sum, e) => {
     if (e.type === "one_time") return sum;
     const daily = e.dailyAmount ? parseFloat(e.dailyAmount) : parseFloat(e.amount) / 30;
@@ -150,10 +147,9 @@ router.get("/dashboard/sales-chart", async (_req, res): Promise<void> => {
 });
 
 router.get("/dashboard/top-products", async (_req, res): Promise<void> => {
-  const salesSnap = await firestore.collection("sales").get();
+  const allSales = await salesCache.all();
   const totals: Record<number, { productName: string; totalSold: number; revenue: number }> = {};
-  for (const doc of salesSnap.docs) {
-    const sale = doc.data();
+  for (const { data: sale } of allSales) {
     for (const item of sale.items as any[]) {
       if (!totals[item.productId]) totals[item.productId] = { productName: item.productName, totalSold: 0, revenue: 0 };
       totals[item.productId].totalSold += item.quantity;
@@ -164,42 +160,47 @@ router.get("/dashboard/top-products", async (_req, res): Promise<void> => {
     Object.entries(totals)
       .map(([id, data]) => ({ productId: parseInt(id), ...data }))
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 10)
+      .slice(0, 10),
   );
 });
 
 router.get("/dashboard/expiring-products", async (_req, res): Promise<void> => {
   const today = new Date().toISOString().slice(0, 10);
   const soonDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const snap = await firestore.collection("products").get();
+  const list = await productsCacheApi.all();
   res.json(
-    snap.docs
-      .filter((d) => { const p = d.data(); return p.expiryDate && p.expiryDate >= today && p.expiryDate <= soonDate; })
-      .map((d) => {
-        const p = d.data();
-        return { ...p, id: parseInt(d.id, 10), wholesalePrice: parseFloat(p.wholesalePrice), retailPrice: parseFloat(p.retailPrice), unitWholesalePrice: p.unitWholesalePrice ? parseFloat(p.unitWholesalePrice) : null };
-      })
+    list
+      .filter(({ raw: p }) => p.expiryDate && p.expiryDate >= today && p.expiryDate <= soonDate)
+      .map(({ id, raw: p }) => ({
+        ...p,
+        id,
+        wholesalePrice: parseFloat(p.wholesalePrice),
+        retailPrice: parseFloat(p.retailPrice),
+        unitWholesalePrice: p.unitWholesalePrice ? parseFloat(p.unitWholesalePrice) : null,
+      })),
   );
 });
 
 router.get("/dashboard/net-profit", async (req, res): Promise<void> => {
   const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
-  const [salesSnap, productsSnap, expensesSnap, advancesSnap] = await Promise.all([
-    firestore.collection("sales").get(),
-    firestore.collection("products").get(),
-    firestore.collection("expenses").get(),
-    firestore.collection("advances").get(),
+  const [allSales, productList, allExpenses, allAdvances] = await Promise.all([
+    salesCache.all(),
+    productsCacheApi.all(),
+    expensesCache.all(),
+    advancesCache.all(),
   ]);
+  const products = productList.map((p) => ({ ...p.raw, id: p.id }));
 
-  const products = productsSnap.docs.map((d) => ({ ...d.data(), id: parseInt(d.id, 10) }));
   const monthStart = new Date(month + "-01");
   const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59);
-  const monthSales = salesSnap.docs.map((d) => d.data()).filter((s) => {
+  const monthSales = allSales.map((s) => s.data).filter((s) => {
     const d = tsToDate(s.createdAt);
     return d >= monthStart && d <= monthEnd;
   });
 
-  let grossProfit = 0; let revenue = 0; let wholesaleCost = 0;
+  let grossProfit = 0;
+  let revenue = 0;
+  let wholesaleCost = 0;
   for (const sale of monthSales) {
     for (const item of sale.items as any[]) {
       const product = products.find((p) => p.id === item.productId);
@@ -212,15 +213,21 @@ router.get("/dashboard/net-profit", async (req, res): Promise<void> => {
     grossProfit = revenue - wholesaleCost - parseFloat(sale.discount);
   }
 
-  const monthExpenses = expensesSnap.docs.map((d) => d.data()).filter((e) => e.month === month);
+  const monthExpenses = allExpenses.map((e) => e.data).filter((e) => e.month === month);
   const totalExpenses = monthExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  const monthAdvances = advancesSnap.docs.map((d) => d.data()).filter((a) => a.month === month && a.type === "advance");
+  const monthAdvances = allAdvances.map((a) => a.data).filter((a) => a.month === month && a.type === "advance");
   const totalAdvances = monthAdvances.reduce((sum, a) => sum + parseFloat(a.amount), 0);
-  const monthPenalties = advancesSnap.docs.map((d) => d.data()).filter((a) => a.month === month && a.type === "penalty");
+  const monthPenalties = allAdvances.map((a) => a.data).filter((a) => a.month === month && a.type === "penalty");
   const totalPenalties = monthPenalties.reduce((sum, a) => sum + parseFloat(a.amount), 0);
 
   res.json({
-    month, revenue, wholesaleCost, grossProfit, totalExpenses, totalAdvances, totalPenalties,
+    month,
+    revenue,
+    wholesaleCost,
+    grossProfit,
+    totalExpenses,
+    totalAdvances,
+    totalPenalties,
     netProfit: grossProfit - totalExpenses - totalAdvances + totalPenalties,
     expenseBreakdown: monthExpenses.map((e) => ({ name: e.name, amount: parseFloat(e.amount) })),
   });

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { nextId, tsToDate } from "../lib/firebase";
+import { expensesCache, usersCache } from "../lib/cache";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -31,19 +32,19 @@ function calcDailyAmount(type: string, amount: number, daysInMonth: number): num
 }
 
 router.get("/expenses", async (req, res): Promise<void> => {
-  const snap = await firestore.collection("expenses").orderBy("createdAt", "desc").get();
-  let expenses = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
+  let expenses = await expensesCache.all();
+  expenses.sort((a, b) => +tsToDate(b.data.createdAt) - +tsToDate(a.data.createdAt));
   const month = req.query.month as string | undefined;
-  if (month) expenses = expenses.filter(({ raw }) => raw.month === month);
-  res.json(expenses.map(({ raw, id }) => toExpense(id, raw)));
+  if (month) expenses = expenses.filter(({ data }) => data.month === month);
+  res.json(expenses.map(({ id, data }) => toExpense(id, data)));
 });
 
 router.get("/expenses/daily-total", async (req, res): Promise<void> => {
   const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
-  const snap = await firestore.collection("expenses").get();
-  const monthExpenses = snap.docs.filter((d) => d.data().month === month);
-  const total = monthExpenses.reduce((sum, d) => {
-    const daily = d.data().dailyAmount ? parseFloat(d.data().dailyAmount) : 0;
+  const all = await expensesCache.all();
+  const monthExpenses = all.filter(({ data }) => data.month === month);
+  const total = monthExpenses.reduce((sum, { data }) => {
+    const daily = data.dailyAmount ? parseFloat(data.dailyAmount) : 0;
     return sum + daily;
   }, 0);
   res.json({ month, dailyTotal: total });
@@ -63,8 +64,8 @@ router.post("/expenses", async (req, res): Promise<void> => {
     try {
       const payload = JSON.parse(Buffer.from(token, "base64").toString());
       addedById = payload.id;
-      const userSnap = await firestore.collection("users").doc(String(payload.id)).get();
-      if (userSnap.exists) addedByName = userSnap.data()!.name;
+      const user = await usersCache.get(payload.id);
+      if (user) addedByName = user.name;
     } catch {}
   }
 
@@ -81,18 +82,18 @@ router.post("/expenses", async (req, res): Promise<void> => {
     addedByName,
     createdAt: now,
   };
-  await firestore.collection("expenses").doc(String(id)).set(data);
+  await expensesCache.set(id, data);
   res.status(201).json(toExpense(id, data));
 });
 
 router.delete("/expenses/:id", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
-  const snap = await firestore.collection("expenses").doc(id).get();
-  if (!snap.exists) {
+  const idNum = parseInt(req.params.id as string, 10);
+  const existing = await expensesCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "المصروف غير موجود" });
     return;
   }
-  await firestore.collection("expenses").doc(id).delete();
+  await expensesCache.delete(idNum);
   res.sendStatus(204);
 });
 

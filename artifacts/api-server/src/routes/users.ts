@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { nextId, tsToDate } from "../lib/firebase";
+import { usersCache } from "../lib/cache";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -29,8 +30,9 @@ function toUser(id: number, data: any) {
 }
 
 router.get("/users", async (_req, res): Promise<void> => {
-  const snap = await firestore.collection("users").orderBy("createdAt").get();
-  res.json(snap.docs.map((d) => toUser(parseInt(d.id, 10), d.data())));
+  const all = await usersCache.all();
+  all.sort((a, b) => +tsToDate(a.data.createdAt) - +tsToDate(b.data.createdAt));
+  res.json(all.map(({ id, data }) => toUser(id, data)));
 });
 
 router.post("/users", async (req, res): Promise<void> => {
@@ -48,29 +50,29 @@ router.post("/users", async (req, res): Promise<void> => {
     createdAt: now,
     updatedAt: now,
   };
-  await firestore.collection("users").doc(String(id)).set(data);
+  await usersCache.set(id, data);
   res.status(201).json(toUser(id, data));
 });
 
 router.get("/users/:id", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
-  const snap = await firestore.collection("users").doc(id).get();
-  if (!snap.exists) {
+  const idNum = parseInt(req.params.id as string, 10);
+  const data = await usersCache.get(idNum);
+  if (!data) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  res.json(toUser(parseInt(snap.id, 10), snap.data()!));
+  res.json(toUser(idNum, data));
 });
 
 router.patch("/users/:id", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
+  const idNum = parseInt(req.params.id as string, 10);
   const parsed = UpdateUserBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const snap = await firestore.collection("users").doc(id).get();
-  if (!snap.exists) {
+  const existing = await usersCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "User not found" });
     return;
   }
@@ -84,19 +86,18 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
   if (d.phone !== undefined) updates.phone = d.phone ?? null;
   if (d.employeeBarcode !== undefined) updates.employeeBarcode = d.employeeBarcode ?? null;
 
-  await firestore.collection("users").doc(id).update(updates);
-  const updated = await firestore.collection("users").doc(id).get();
-  res.json(toUser(parseInt(updated.id, 10), updated.data()!));
+  const merged = await usersCache.update(idNum, updates);
+  res.json(toUser(idNum, merged ?? { ...existing, ...updates }));
 });
 
 router.delete("/users/:id", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
-  const snap = await firestore.collection("users").doc(id).get();
-  if (!snap.exists) {
+  const idNum = parseInt(req.params.id as string, 10);
+  const existing = await usersCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  await firestore.collection("users").doc(id).delete();
+  await usersCache.delete(idNum);
   res.sendStatus(204);
 });
 

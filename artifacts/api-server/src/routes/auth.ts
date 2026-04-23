@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { nextId, tsToDate } from "../lib/firebase";
+import { usersCache } from "../lib/cache";
 import { LoginBody } from "@workspace/api-zod";
 import { z } from "zod";
 
@@ -12,60 +13,14 @@ const RegisterBody = z.object({
 
 const router: IRouter = Router();
 
-// In-memory user cache to drastically cut Firestore reads (auth/me, login, etc.)
-type CachedUser = { id: number; data: any };
-let userCache: Map<number, CachedUser> | null = null;
-let userCacheLoading: Promise<Map<number, CachedUser>> | null = null;
-
-async function loadUserCache(): Promise<Map<number, CachedUser>> {
-  if (userCacheLoading) return userCacheLoading;
-  userCacheLoading = (async () => {
-    try {
-      const snap = await firestore.collection("users").get();
-      const map = new Map<number, CachedUser>();
-      for (const doc of snap.docs) {
-        const id = parseInt(doc.id, 10);
-        map.set(id, { id, data: doc.data() });
-      }
-      userCache = map;
-      console.log(`[users] cache loaded: ${map.size} users`);
-      return map;
-    } finally {
-      userCacheLoading = null;
-    }
-  })();
-  return userCacheLoading;
-}
-
-async function getUsers(): Promise<Map<number, CachedUser>> {
-  if (userCache) return userCache;
-  return loadUserCache();
-}
-
-function upsertUserCache(id: number, data: any) {
-  if (!userCache) return;
-  userCache.set(id, { id, data });
-}
-
-function findUserByEmail(email: string): CachedUser | undefined {
-  if (!userCache) return undefined;
+async function findUserByEmail(email: string): Promise<{ id: number; data: any } | undefined> {
   const target = email.toLowerCase();
-  for (const u of userCache.values()) {
-    if (typeof u.data.email === "string" && u.data.email.toLowerCase() === target) return u;
-  }
-  return undefined;
+  return usersCache.findOne((u) => typeof u.email === "string" && u.email.toLowerCase() === target);
 }
 
-function findUserByPhone(phone: string): CachedUser | undefined {
-  if (!userCache) return undefined;
-  for (const u of userCache.values()) {
-    if (u.data.phone === phone) return u;
-  }
-  return undefined;
+async function findUserByPhone(phone: string): Promise<{ id: number; data: any } | undefined> {
+  return usersCache.findOne((u) => u.phone === phone);
 }
-
-// Warm cache at boot (non-blocking)
-loadUserCache().catch((e) => console.error("[users] initial cache load failed:", e?.message ?? e));
 
 router.post("/auth/register", async (req, res): Promise<void> => {
   const parsed = RegisterBody.safeParse(req.body);
@@ -75,8 +30,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }
   const { name, email, phone, password } = parsed.data;
 
-  await getUsers();
-  if (findUserByEmail(email)) {
+  if (await findUserByEmail(email)) {
     res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل" });
     return;
   }
@@ -95,8 +49,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     createdAt: now,
     updatedAt: now,
   };
-  await firestore.collection("users").doc(String(id)).set(newUser);
-  upsertUserCache(id, newUser);
+  await usersCache.set(id, newUser);
 
   const { password: _pw, ...safeUser } = newUser;
   const token = Buffer.from(JSON.stringify({ id, role: "customer" })).toString("base64");
@@ -114,17 +67,16 @@ router.post("/auth/guest", async (req, res): Promise<void> => {
   const name = (req.body?.name as string | undefined)?.trim() || "ضيف";
   const now = new Date();
 
-  let id: number;
+  let id: number | undefined;
   let user: any;
-  await getUsers();
   if (phone) {
-    const existing = findUserByPhone(phone);
+    const existing = await findUserByPhone(phone);
     if (existing) {
       id = existing.id;
       user = existing.data;
     }
   }
-  if (!user!) {
+  if (!user) {
     id = await nextId("users");
     user = {
       name,
@@ -139,8 +91,7 @@ router.post("/auth/guest", async (req, res): Promise<void> => {
       createdAt: now,
       updatedAt: now,
     };
-    await firestore.collection("users").doc(String(id)).set(user);
-    upsertUserCache(id, user);
+    await usersCache.set(id, user);
   }
 
   const token = Buffer.from(JSON.stringify({ id: id!, role: user.role })).toString("base64");
@@ -157,8 +108,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   }
   const { email, password } = parsed.data;
 
-  await getUsers();
-  const found = findUserByEmail(email);
+  const found = await findUserByEmail(email);
   if (!found) {
     res.status(401).json({ error: "البريد الإلكتروني أو كلمة المرور غير صحيحة" });
     return;
@@ -200,13 +150,11 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   try {
     const payload = JSON.parse(Buffer.from(token, "base64").toString());
     const id = Number(payload.id);
-    const map = await getUsers();
-    const cached = map.get(id);
-    if (!cached) {
+    const user = await usersCache.get(id);
+    if (!user) {
       res.status(401).json({ error: "User not found" });
       return;
     }
-    const user = cached.data;
     const { password: _pw, ...safeUser } = user;
     res.json({
       ...safeUser,

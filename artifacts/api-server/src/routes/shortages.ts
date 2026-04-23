@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { nextId, tsToDate } from "../lib/firebase";
+import { shortagesCache, usersCache } from "../lib/cache";
 import { CreateShortageBody, ResolveShortageBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -15,8 +16,9 @@ function toShortage(id: number, data: any) {
 }
 
 router.get("/shortages", async (_req, res): Promise<void> => {
-  const snap = await firestore.collection("shortages").orderBy("createdAt", "desc").get();
-  res.json(snap.docs.map((d) => toShortage(parseInt(d.id, 10), d.data())));
+  const all = await shortagesCache.all();
+  all.sort((a, b) => +tsToDate(b.data.createdAt) - +tsToDate(a.data.createdAt));
+  res.json(all.map(({ id, data }) => toShortage(id, data)));
 });
 
 router.post("/shortages", async (req, res): Promise<void> => {
@@ -33,8 +35,8 @@ router.post("/shortages", async (req, res): Promise<void> => {
     try {
       const payload = JSON.parse(Buffer.from(token, "base64").toString());
       reportedById = payload.id;
-      const userSnap = await firestore.collection("users").doc(String(payload.id)).get();
-      if (userSnap.exists) reportedByName = userSnap.data()!.name;
+      const user = await usersCache.get(payload.id);
+      if (user) reportedByName = user.name;
     } catch {}
   }
 
@@ -50,20 +52,20 @@ router.post("/shortages", async (req, res): Promise<void> => {
     resolvedAt: null,
     createdAt: now,
   };
-  await firestore.collection("shortages").doc(String(id)).set(data);
+  await shortagesCache.set(id, data);
   res.status(201).json(toShortage(id, data));
 });
 
 router.patch("/shortages/:id/resolve", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
+  const idNum = parseInt(req.params.id as string, 10);
   const parsed = ResolveShortageBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const snap = await firestore.collection("shortages").doc(id).get();
-  if (!snap.exists) {
+  const existing = await shortagesCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "Report not found" });
     return;
   }
@@ -77,13 +79,12 @@ router.patch("/shortages/:id/resolve", async (req, res): Promise<void> => {
     } catch {}
   }
 
-  await firestore.collection("shortages").doc(id).update({
+  const merged = await shortagesCache.update(idNum, {
     status: parsed.data.status,
     resolvedById,
     resolvedAt: new Date(),
   });
-  const updated = await firestore.collection("shortages").doc(id).get();
-  res.json(toShortage(parseInt(updated.id, 10), updated.data()!));
+  res.json(toShortage(idNum, merged ?? { ...existing, status: parsed.data.status, resolvedById, resolvedAt: new Date() }));
 });
 
 export default router;

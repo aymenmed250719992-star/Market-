@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { nextId, tsToDate } from "../lib/firebase";
+import { salariesCache, usersCache } from "../lib/cache";
 import { CreateSalaryRecordBody, ListSalariesQueryParams } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -19,14 +20,14 @@ function toSalary(id: number, data: any) {
 
 router.get("/salaries", async (req, res): Promise<void> => {
   const params = ListSalariesQueryParams.safeParse(req.query);
-  const snap = await firestore.collection("salaries").orderBy("createdAt", "desc").get();
-  let salaries = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
+  let salaries = await salariesCache.all();
+  salaries.sort((a, b) => +tsToDate(b.data.createdAt) - +tsToDate(a.data.createdAt));
 
   if (params.success) {
-    if (params.data.userId) salaries = salaries.filter(({ raw }) => raw.userId === params.data.userId);
-    if (params.data.month) salaries = salaries.filter(({ raw }) => raw.month === params.data.month);
+    if (params.data.userId) salaries = salaries.filter(({ data }) => data.userId === params.data.userId);
+    if (params.data.month) salaries = salaries.filter(({ data }) => data.month === params.data.month);
   }
-  res.json(salaries.map(({ raw, id }) => toSalary(id, raw)));
+  res.json(salaries.map(({ id, data }) => toSalary(id, data)));
 });
 
 router.post("/salaries", async (req, res): Promise<void> => {
@@ -40,14 +41,14 @@ router.post("/salaries", async (req, res): Promise<void> => {
   const deduction = parsed.data.deduction ?? 0;
   const netSalary = parsed.data.baseSalary + bonus - deduction;
 
-  const userSnap = await firestore.collection("users").doc(String(parsed.data.userId)).get();
+  const user = await usersCache.get(parsed.data.userId);
 
   const id = await nextId("salaries");
   const now = new Date();
   const data = {
     userId: parsed.data.userId,
-    userName: userSnap.exists ? userSnap.data()!.name : "موظف",
-    userRole: userSnap.exists ? userSnap.data()!.role : "worker",
+    userName: user ? user.name : "موظف",
+    userRole: user ? user.role : "worker",
     month: parsed.data.month,
     baseSalary: parsed.data.baseSalary.toString(),
     bonus: bonus.toString(),
@@ -58,7 +59,7 @@ router.post("/salaries", async (req, res): Promise<void> => {
     notes: parsed.data.notes ?? null,
     createdAt: now,
   };
-  await firestore.collection("salaries").doc(String(id)).set(data);
+  await salariesCache.set(id, data);
   res.status(201).json(toSalary(id, data));
 });
 

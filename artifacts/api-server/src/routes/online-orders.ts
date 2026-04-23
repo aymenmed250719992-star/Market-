@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
+import { nextId, tsToDate } from "../lib/firebase";
+import { onlineOrdersCache, customersCache, salesCache, usersCache } from "../lib/cache";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -36,9 +37,15 @@ function toOrder(id: number, data: any) {
   };
 }
 
+async function getProductsApi() {
+  const mod = await import("./products");
+  return mod.productsCacheApi;
+}
+
 router.get("/online-orders", async (_req, res): Promise<void> => {
-  const snap = await firestore.collection("online_orders").orderBy("createdAt", "desc").get();
-  res.json(snap.docs.map((d) => toOrder(parseInt(d.id, 10), d.data())));
+  const all = await onlineOrdersCache.all();
+  all.sort((a, b) => +tsToDate(b.data.createdAt) - +tsToDate(a.data.createdAt));
+  res.json(all.map(({ id, data }) => toOrder(id, data)));
 });
 
 router.get("/online-orders/lookup", async (req, res): Promise<void> => {
@@ -48,41 +55,36 @@ router.get("/online-orders/lookup", async (req, res): Promise<void> => {
     return;
   }
 
-  const [customerSnap, ordersSnap] = await Promise.all([
-    firestore.collection("customers").where("phone", "==", phone).limit(1).get(),
-    firestore.collection("online_orders").where("phone", "==", phone).orderBy("createdAt", "desc").get(),
-  ]);
+  const customerFound = await customersCache.findOne((c) => c.phone === phone);
+  const orders = (await onlineOrdersCache.filter((o) => o.phone === phone))
+    .sort((a, b) => +tsToDate(b.data.createdAt) - +tsToDate(a.data.createdAt));
 
-  const customer = !customerSnap.empty ? customerSnap.docs[0] : null;
   let invoices: any[] = [];
-  if (customer) {
-    const salesSnap = await firestore.collection("sales")
-      .where("customerId", "==", parseInt(customer.id, 10))
-      .orderBy("createdAt", "desc")
-      .get();
-    invoices = salesSnap.docs.map((d) => {
-      const s = d.data();
-      return {
-        ...s,
-        id: parseInt(d.id, 10),
-        createdAt: tsToDate(s.createdAt),
-        subtotal: parseFloat(s.subtotal),
-        discount: parseFloat(s.discount),
-        total: parseFloat(s.total),
-      };
-    });
+  if (customerFound) {
+    const sales = (await salesCache.filter((s) => s.customerId === customerFound.id))
+      .sort((a, b) => +tsToDate(b.data.createdAt) - +tsToDate(a.data.createdAt));
+    invoices = sales.map(({ id, data: s }) => ({
+      ...s,
+      id,
+      createdAt: tsToDate(s.createdAt),
+      subtotal: parseFloat(s.subtotal),
+      discount: parseFloat(s.discount),
+      total: parseFloat(s.total),
+    }));
   }
 
   res.json({
-    customer: customer ? {
-      ...customer.data(),
-      id: parseInt(customer.id, 10),
-      createdAt: tsToDate(customer.data().createdAt),
-      updatedAt: tsToDate(customer.data().updatedAt),
-      creditLimit: parseFloat(customer.data().creditLimit),
-      totalDebt: parseFloat(customer.data().totalDebt),
-    } : null,
-    orders: ordersSnap.docs.map((d) => toOrder(parseInt(d.id, 10), d.data())),
+    customer: customerFound
+      ? {
+          ...customerFound.data,
+          id: customerFound.id,
+          createdAt: tsToDate(customerFound.data.createdAt),
+          updatedAt: tsToDate(customerFound.data.updatedAt),
+          creditLimit: parseFloat(customerFound.data.creditLimit),
+          totalDebt: parseFloat(customerFound.data.totalDebt),
+        }
+      : null,
+    orders: orders.map(({ id, data }) => toOrder(id, data)),
     invoices,
   });
 });
@@ -95,19 +97,18 @@ router.post("/online-orders", async (req, res): Promise<void> => {
   }
 
   const data = parsed.data;
-  const customerSnap = await firestore.collection("customers").where("phone", "==", data.phone).limit(1).get();
-  const customer = !customerSnap.empty ? customerSnap.docs[0] : null;
+  const customerFound = await customersCache.findOne((c) => c.phone === data.phone);
+  const productsApi = await getProductsApi();
 
   const items = [];
   let subtotal = 0;
 
   for (const item of data.items) {
-    const productSnap = await firestore.collection("products").doc(String(item.productId)).get();
-    if (!productSnap.exists) {
+    const product = await productsApi.get(item.productId);
+    if (!product) {
       res.status(400).json({ error: "يوجد منتج غير متوفر في الطلب" });
       return;
     }
-    const product = productSnap.data()!;
     if (product.stock < item.quantity) {
       res.status(400).json({ error: `الكمية غير كافية من ${product.name}` });
       return;
@@ -123,7 +124,7 @@ router.post("/online-orders", async (req, res): Promise<void> => {
   const id = await nextId("online_orders");
   const now = new Date();
   const orderData = {
-    customerId: customer ? parseInt(customer.id, 10) : null,
+    customerId: customerFound ? customerFound.id : null,
     customerName: data.customerName,
     phone: data.phone,
     address: data.address ?? null,
@@ -139,20 +140,20 @@ router.post("/online-orders", async (req, res): Promise<void> => {
     createdAt: now,
     updatedAt: now,
   };
-  await firestore.collection("online_orders").doc(String(id)).set(orderData);
+  await onlineOrdersCache.set(id, orderData);
   res.status(201).json(toOrder(id, orderData));
 });
 
 router.patch("/online-orders/:id", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
+  const idNum = parseInt(req.params.id as string, 10);
   const parsed = updateOrderSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "بيانات التحديث غير صحيحة" });
     return;
   }
 
-  const snap = await firestore.collection("online_orders").doc(id).get();
-  if (!snap.exists) {
+  const existing = await onlineOrdersCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "الطلب غير موجود" });
     return;
   }
@@ -165,14 +166,13 @@ router.patch("/online-orders/:id", async (req, res): Promise<void> => {
     updates.assignedDistributorId = parsed.data.assignedDistributorId;
     updates.assignedDistributorName = null;
     if (parsed.data.assignedDistributorId) {
-      const distSnap = await firestore.collection("users").doc(String(parsed.data.assignedDistributorId)).get();
-      if (distSnap.exists) updates.assignedDistributorName = distSnap.data()!.name;
+      const dist = await usersCache.get(parsed.data.assignedDistributorId);
+      if (dist) updates.assignedDistributorName = dist.name;
     }
   }
 
-  await firestore.collection("online_orders").doc(id).update(updates);
-  const updated = await firestore.collection("online_orders").doc(id).get();
-  res.json(toOrder(parseInt(updated.id, 10), updated.data()!));
+  const merged = await onlineOrdersCache.update(idNum, updates);
+  res.json(toOrder(idNum, merged ?? { ...existing, ...updates }));
 });
 
 export default router;

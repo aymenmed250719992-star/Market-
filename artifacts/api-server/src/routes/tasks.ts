@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { firestore, nextId, tsToDate } from "../lib/firebase";
-import { FieldValue } from "firebase-admin/firestore";
+import { nextId, tsToDate, FieldValue } from "../lib/firebase";
+import { tasksCache, usersCache } from "../lib/cache";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -30,15 +30,15 @@ const CompleteTaskBody = z.object({ notes: z.string().optional() });
 const ApproveTaskBody = z.object({ approved: z.boolean(), notes: z.string().optional() });
 
 router.get("/tasks", async (req, res): Promise<void> => {
-  const snap = await firestore.collection("tasks").orderBy("createdAt", "desc").get();
-  let tasks = snap.docs.map((d) => ({ raw: d.data(), id: parseInt(d.id, 10) }));
+  let tasks = await tasksCache.all();
+  tasks.sort((a, b) => +tsToDate(b.data.createdAt) - +tsToDate(a.data.createdAt));
 
   const { status, type, assignedToId } = req.query as Record<string, string | undefined>;
-  if (status) tasks = tasks.filter(({ raw }) => raw.status === status);
-  if (type) tasks = tasks.filter(({ raw }) => raw.type === type);
-  if (assignedToId) tasks = tasks.filter(({ raw }) => raw.assignedToId === parseInt(assignedToId, 10));
+  if (status) tasks = tasks.filter(({ data }) => data.status === status);
+  if (type) tasks = tasks.filter(({ data }) => data.type === type);
+  if (assignedToId) tasks = tasks.filter(({ data }) => data.assignedToId === parseInt(assignedToId, 10));
 
-  res.json(tasks.map(({ raw, id }) => toTask(id, raw)));
+  res.json(tasks.map(({ id, data }) => toTask(id, data)));
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
@@ -55,15 +55,15 @@ router.post("/tasks", async (req, res): Promise<void> => {
     try {
       const payload = JSON.parse(Buffer.from(token, "base64").toString());
       reportedById = payload.id;
-      const userSnap = await firestore.collection("users").doc(String(payload.id)).get();
-      if (userSnap.exists) reportedByName = userSnap.data()!.name;
+      const user = await usersCache.get(payload.id);
+      if (user) reportedByName = user.name;
     } catch {}
   }
 
   let assignedToName: string | null = null;
   if (parsed.data.assignedToId) {
-    const assigneeSnap = await firestore.collection("users").doc(String(parsed.data.assignedToId)).get();
-    if (assigneeSnap.exists) assignedToName = assigneeSnap.data()!.name;
+    const assignee = await usersCache.get(parsed.data.assignedToId);
+    if (assignee) assignedToName = assignee.name;
   }
 
   const id = await nextId("tasks");
@@ -80,41 +80,39 @@ router.post("/tasks", async (req, res): Promise<void> => {
     completedAt: null,
     createdAt: now,
   };
-  await firestore.collection("tasks").doc(String(id)).set(data);
+  await tasksCache.set(id, data);
   res.status(201).json(toTask(id, data));
 });
 
 router.patch("/tasks/:id/complete", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
+  const idNum = parseInt(req.params.id as string, 10);
   const parsed = CompleteTaskBody.safeParse(req.body);
-  const snap = await firestore.collection("tasks").doc(id).get();
-  if (!snap.exists) {
+  const existing = await tasksCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "المهمة غير موجودة" });
     return;
   }
-  await firestore.collection("tasks").doc(id).update({
+  const merged = await tasksCache.update(idNum, {
     status: "completed",
     notes: parsed.success && parsed.data.notes ? parsed.data.notes : null,
     completedAt: new Date(),
   });
-  const updated = await firestore.collection("tasks").doc(id).get();
-  res.json(toTask(parseInt(updated.id, 10), updated.data()!));
+  res.json(toTask(idNum, merged ?? existing));
 });
 
 router.patch("/tasks/:id/approve", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
+  const idNum = parseInt(req.params.id as string, 10);
   const parsed = ApproveTaskBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "بيانات غير صحيحة" });
     return;
   }
 
-  const snap = await firestore.collection("tasks").doc(id).get();
-  if (!snap.exists) {
+  const existing = await tasksCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "المهمة غير موجودة" });
     return;
   }
-  const existing = snap.data()!;
 
   const token = req.cookies?.session ?? req.headers.authorization?.replace("Bearer ", "");
   let approvedById: number | null = null;
@@ -123,13 +121,13 @@ router.patch("/tasks/:id/approve", async (req, res): Promise<void> => {
     try {
       const payload = JSON.parse(Buffer.from(token, "base64").toString());
       approvedById = payload.id;
-      const userSnap = await firestore.collection("users").doc(String(payload.id)).get();
-      if (userSnap.exists) approvedByName = userSnap.data()!.name;
+      const user = await usersCache.get(payload.id);
+      if (user) approvedByName = user.name;
     } catch {}
   }
 
   const newStatus = parsed.data.approved ? "approved" : "rejected";
-  await firestore.collection("tasks").doc(id).update({
+  const merged = await tasksCache.update(idNum, {
     status: newStatus,
     approvedById,
     approvedByName,
@@ -138,23 +136,22 @@ router.patch("/tasks/:id/approve", async (req, res): Promise<void> => {
   });
 
   if (parsed.data.approved && existing.points > 0 && existing.assignedToId) {
-    await firestore.collection("users").doc(String(existing.assignedToId)).update({
+    await usersCache.update(existing.assignedToId, {
       activityPoints: FieldValue.increment(existing.points),
     });
   }
 
-  const updated = await firestore.collection("tasks").doc(id).get();
-  res.json(toTask(parseInt(updated.id, 10), updated.data()!));
+  res.json(toTask(idNum, merged ?? existing));
 });
 
 router.delete("/tasks/:id", async (req, res): Promise<void> => {
-  const id = req.params.id as string;
-  const snap = await firestore.collection("tasks").doc(id).get();
-  if (!snap.exists) {
+  const idNum = parseInt(req.params.id as string, 10);
+  const existing = await tasksCache.get(idNum);
+  if (!existing) {
     res.status(404).json({ error: "المهمة غير موجودة" });
     return;
   }
-  await firestore.collection("tasks").doc(id).delete();
+  await tasksCache.delete(idNum);
   res.sendStatus(204);
 });
 
