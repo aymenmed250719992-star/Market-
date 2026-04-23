@@ -20,6 +20,7 @@ import backupRouter from "./backup";
 import loyaltyRouter from "./loyalty";
 import returnsRouter from "./returns";
 import analyticsRouter from "./analytics";
+import priceSuggestionsRouter from "./price-suggestions";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(backupRouter);
 router.use(loyaltyRouter);
 router.use(returnsRouter);
 router.use(analyticsRouter);
+router.use(priceSuggestionsRouter);
 
 export default router;
