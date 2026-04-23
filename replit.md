@@ -31,6 +31,8 @@ A full-stack Algerian Supermarket Management System with RBAC, Arabic RTL UI, on
 - **Sales Returns**: Lookup any sale and partially/fully return items; restock products and refund cash or reduce karni debt automatically
 - **Audit Log**: Full who/what/when tracking of sales, returns, loyalty redemption, backup operations (admin-only `/audit`)
 - **Backup & Restore**: Admin-only `/backup` page exports full DB snapshot as JSON and restores from a backup file
+- **Smart Analytics** (`/analytics`, admin): Month-over-month comparison (revenue, gross/net profit, sales count, avg ticket) with daily revenue line chart, top 10 products, full yearly bar chart
+- **AI Assistant**: Strong open-source LLM (Llama 3.3 70B via OpenRouter) as primary, with Gemini and OpenAI as automatic fallbacks
 - **Arabic RTL UI**: Full right-to-left, Tajawal font, dark mode by default, DZD currency
 - **PWA + Native-Ready**: Installable Progressive Web App (manifest, service worker, offline cache via `vite-plugin-pwa`); Capacitor configured for native Android/iOS builds (`pnpm --filter @workspace/supermarket cap:add:android` / `cap:add:ios`)
 - **In-Memory Product Cache**: API server caches all products in memory after first Firestore load to keep search/listing instant and minimize Firestore reads (auto-invalidated on writes)
@@ -141,6 +143,9 @@ POST /api/customers/:id/redeem-points  # admin/cashier
 GET  /api/returns                   # admin/cashier
 POST /api/returns                   # admin/cashier — { saleId, items[], reason? }
 GET  /api/returns/by-sale/:saleId
+
+GET  /api/analytics/monthly-comparison?year&month   # admin only
+GET  /api/analytics/yearly-overview?year            # admin only
 ```
 
 ## Key Files

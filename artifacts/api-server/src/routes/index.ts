@@ -19,6 +19,7 @@ import auditRouter from "./audit";
 import backupRouter from "./backup";
 import loyaltyRouter from "./loyalty";
 import returnsRouter from "./returns";
+import analyticsRouter from "./analytics";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(auditRouter);
 router.use(backupRouter);
 router.use(loyaltyRouter);
 router.use(returnsRouter);
+router.use(analyticsRouter);
 
 export default router;

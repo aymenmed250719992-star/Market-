@@ -26,6 +26,7 @@ import DistributorPortal from "@/pages/distributor-portal";
 import AuditLog from "@/pages/audit-log";
 import Backup from "@/pages/backup";
 import Returns from "@/pages/returns";
+import Analytics from "@/pages/analytics";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
 
@@ -136,6 +137,9 @@ function Router() {
       </Route>
       <Route path="/backup">
         <ProtectedRoute component={Backup} roles={["admin"]} />
+      </Route>
+      <Route path="/analytics">
+        <ProtectedRoute component={Analytics} roles={["admin"]} />
       </Route>
       <Route>
         <Layout>

@@ -10,8 +10,41 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "dummy",
 });
 
+const openrouter = process.env.AI_INTEGRATIONS_OPENROUTER_BASE_URL
+  ? new OpenAI({
+      baseURL: process.env.AI_INTEGRATIONS_OPENROUTER_BASE_URL,
+      apiKey: process.env.AI_INTEGRATIONS_OPENROUTER_API_KEY ?? "dummy",
+    })
+  : null;
+
+const OPENROUTER_PRIMARY_MODEL = process.env.OPENROUTER_MODEL ?? "meta-llama/llama-3.3-70b-instruct";
+const OPENROUTER_FALLBACK_MODEL = "deepseek/deepseek-chat-v3.1";
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+
+async function callOpenRouter(systemPrompt: string, userQuestion: string): Promise<string | null> {
+  if (!openrouter) return null;
+  for (const model of [OPENROUTER_PRIMARY_MODEL, OPENROUTER_FALLBACK_MODEL]) {
+    try {
+      const completion = await openrouter.chat.completions.create({
+        model,
+        max_tokens: 1024,
+        temperature: 0.4,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userQuestion },
+        ],
+      });
+      const txt = completion.choices[0]?.message?.content?.trim();
+      if (txt) return txt;
+    } catch (err) {
+      // try next model
+      void err;
+    }
+  }
+  return null;
+}
 
 async function callGemini(systemPrompt: string, userQuestion: string): Promise<string | null> {
   if (!GEMINI_API_KEY) return null;
@@ -157,12 +190,23 @@ ${role === "admin" ? `
 - لإنشاء مهمة جديدة لأي عامل: [ACTION:CREATE_TASK:title|description]
 لا تنفّذ تعديلات إلا بطلب صريح. اذكر للأدمن في ردّك ما الذي ستغيّره قبل الأمر.` : ""}`;
 
-  let usedProvider: "gemini" | "openai" | "local" = "local";
+  let usedProvider: "openrouter" | "gemini" | "openai" | "local" = "local";
   let answer = "";
   let lastError: any = null;
 
-  // 1) Try Gemini first if configured
-  if (GEMINI_API_KEY) {
+  // 1) Try OpenRouter (Llama 3.3 70B open-source) first if configured
+  if (openrouter) {
+    try {
+      const r = await callOpenRouter(systemPrompt, parsed.data.question);
+      if (r) { answer = r; usedProvider = "openrouter"; }
+    } catch (err: any) {
+      lastError = err;
+      req.log.warn({ err: err?.message }, "OpenRouter call failed");
+    }
+  }
+
+  // 2) Fall back to Gemini if configured
+  if (!answer && GEMINI_API_KEY) {
     try {
       const g = await callGemini(systemPrompt, parsed.data.question);
       if (g) { answer = g; usedProvider = "gemini"; }
@@ -172,7 +216,7 @@ ${role === "admin" ? `
     }
   }
 
-  // 2) Fall back to OpenAI integration if available and Gemini unavailable
+  // 3) Fall back to OpenAI integration if available
   if (!answer && process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
     try {
       const completion = await openai.chat.completions.create({
