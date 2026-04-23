@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Edit, Banknote, Users } from "lucide-react";
+import { Search, Plus, Edit, Banknote, Users, Gift } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -25,6 +25,9 @@ export default function Customers() {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [isRedeemOpen, setIsRedeemOpen] = useState(false);
+  const [redeemPoints, setRedeemPoints] = useState("");
+  const [redeemBusy, setRedeemBusy] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   
   const [formData, setFormData] = useState({
@@ -67,6 +70,40 @@ export default function Customers() {
       note: ""
     });
     setIsPaymentOpen(true);
+  };
+
+  const handleOpenRedeem = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setRedeemPoints("");
+    setIsRedeemOpen(true);
+  };
+
+  const handleRedeem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+    const points = parseInt(redeemPoints, 10);
+    if (!points || points <= 0) return;
+    setRedeemBusy(true);
+    try {
+      const res = await fetch(`/api/customers/${editingCustomer.id}/redeem-points`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ points }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error ?? "فشل الاستبدال");
+      toast({
+        title: "تم الاستبدال",
+        description: `تم خصم ${points} نقطة (=${result.discount} دج). الرصيد المتبقي: ${result.loyaltyPoints}`,
+      });
+      queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+      setIsRedeemOpen(false);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "خطأ", description: err.message });
+    } finally {
+      setRedeemBusy(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -150,6 +187,7 @@ export default function Customers() {
               <TableHead>العنوان</TableHead>
               <TableHead>سقف الدين (دج)</TableHead>
               <TableHead>الديون الحالية (دج)</TableHead>
+              <TableHead>نقاط الولاء</TableHead>
               <TableHead>الحالة</TableHead>
               {(canEdit) && <TableHead className="text-left">إجراءات</TableHead>}
             </TableRow>
@@ -181,6 +219,12 @@ export default function Customers() {
                     {customer.totalDebt}
                   </TableCell>
                   <TableCell>
+                    <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-1 rounded text-xs font-bold inline-flex items-center gap-1">
+                      <Gift className="h-3 w-3" />
+                      {(customer as any).loyaltyPoints ?? 0}
+                    </span>
+                  </TableCell>
+                  <TableCell>
                     {isHighDebt ? (
                       <span className="text-destructive text-xs font-bold bg-destructive/10 px-2 py-1 rounded">تجاوز السقف</span>
                     ) : (
@@ -190,6 +234,15 @@ export default function Customers() {
                   {(canEdit) && (
                     <TableCell className="text-left">
                       <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenRedeem(customer)}
+                          disabled={!((customer as any).loyaltyPoints > 0)}
+                          data-testid={`button-redeem-${customer.id}`}
+                        >
+                          <Gift className="ml-1 h-4 w-4" /> استبدال
+                        </Button>
                         <Button variant="outline" size="sm" onClick={() => handleOpenPayment(customer)} data-testid={`button-pay-debt-${customer.id}`}>
                           <Banknote className="ml-1 h-4 w-4" /> دفع
                         </Button>
@@ -204,7 +257,7 @@ export default function Customers() {
             })}
             {!isLoading && customers?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   لا يوجد زبائن
                 </TableCell>
               </TableRow>
@@ -241,6 +294,40 @@ export default function Customers() {
               <Button type="submit" disabled={createCustomer.isPending || updateCustomer.isPending}>
                 {editingCustomer ? "تحديث" : "إضافة"}
               </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Redeem Loyalty Points Modal */}
+      <Dialog open={isRedeemOpen} onOpenChange={setIsRedeemOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>استبدال نقاط الولاء — {editingCustomer?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="bg-amber-500/10 p-4 rounded-md mb-4 flex justify-between text-sm">
+            <span>الرصيد الحالي:</span>
+            <span className="font-bold text-amber-600 dark:text-amber-400">
+              {(editingCustomer as any)?.loyaltyPoints ?? 0} نقطة
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground mb-2">كل نقطة = 1 دج خصم</div>
+          <form onSubmit={handleRedeem} className="space-y-4">
+            <div className="space-y-2">
+              <Label>عدد النقاط للاستبدال</Label>
+              <Input
+                required
+                type="number"
+                min="1"
+                max={(editingCustomer as any)?.loyaltyPoints ?? 0}
+                value={redeemPoints}
+                onChange={(e) => setRedeemPoints(e.target.value)}
+                data-testid="input-redeem-points"
+              />
+            </div>
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => setIsRedeemOpen(false)}>إلغاء</Button>
+              <Button type="submit" disabled={redeemBusy} data-testid="button-confirm-redeem">تأكيد الاستبدال</Button>
             </DialogFooter>
           </form>
         </DialogContent>

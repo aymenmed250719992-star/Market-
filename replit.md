@@ -27,6 +27,10 @@ A full-stack Algerian Supermarket Management System with RBAC, Arabic RTL UI, on
 - **Payroll**: Monthly salary records with bonus/deduction (admin only)
 - **Staff Operations**: Employee account management, task approval workflow, expense tracking, advances/penalties, and payroll summaries
 - **Dashboard Analytics**: Sales charts, top products, low stock alerts
+- **Loyalty Program**: Customers earn 1 point per 100 DZD spent (1 point = 1 DZD discount on redeem)
+- **Sales Returns**: Lookup any sale and partially/fully return items; restock products and refund cash or reduce karni debt automatically
+- **Audit Log**: Full who/what/when tracking of sales, returns, loyalty redemption, backup operations (admin-only `/audit`)
+- **Backup & Restore**: Admin-only `/backup` page exports full DB snapshot as JSON and restores from a backup file
 - **Arabic RTL UI**: Full right-to-left, Tajawal font, dark mode by default, DZD currency
 - **PWA + Native-Ready**: Installable Progressive Web App (manifest, service worker, offline cache via `vite-plugin-pwa`); Capacitor configured for native Android/iOS builds (`pnpm --filter @workspace/supermarket cap:add:android` / `cap:add:ios`)
 - **In-Memory Product Cache**: API server caches all products in memory after first Firestore load to keep search/listing instant and minimize Firestore reads (auto-invalidated on writes)
@@ -124,6 +128,19 @@ GET /api/dashboard/top-products
 GET /api/dashboard/expiring-products
 
 POST /api/ai/inventory-query
+
+GET  /api/audit                     # admin only
+GET  /api/backup/info               # admin only — collection counts
+GET  /api/backup/export             # admin only — download JSON snapshot
+POST /api/backup/import             # admin only — restore JSON snapshot
+
+GET  /api/loyalty/info
+GET  /api/customers/:id/loyalty
+POST /api/customers/:id/redeem-points  # admin/cashier
+
+GET  /api/returns                   # admin/cashier
+POST /api/returns                   # admin/cashier — { saleId, items[], reason? }
+GET  /api/returns/by-sale/:saleId
 ```
 
 ## Key Files

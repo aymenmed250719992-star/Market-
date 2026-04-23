@@ -13,6 +13,7 @@ function toCustomer(id: number, data: any) {
     updatedAt: tsToDate(data.updatedAt),
     creditLimit: parseFloat(data.creditLimit),
     totalDebt: parseFloat(data.totalDebt),
+    loyaltyPoints: Number(data.loyaltyPoints ?? 0),
   };
 }
 
@@ -34,6 +35,7 @@ router.post("/customers", async (req, res): Promise<void> => {
     ...parsed.data,
     creditLimit: (parsed.data.creditLimit ?? 2000).toString(),
     totalDebt: "0",
+    loyaltyPoints: 0,
     createdAt: now,
     updatedAt: now,
   };

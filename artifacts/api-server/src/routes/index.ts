@@ -15,6 +15,10 @@ import expensesRouter from "./expenses";
 import advancesRouter from "./advances";
 import onlineOrdersRouter from "./online-orders";
 import distributorOffersRouter from "./distributor-offers";
+import auditRouter from "./audit";
+import backupRouter from "./backup";
+import loyaltyRouter from "./loyalty";
+import returnsRouter from "./returns";
 
 const router: IRouter = Router();
 
@@ -34,5 +38,9 @@ router.use(expensesRouter);
 router.use(advancesRouter);
 router.use(onlineOrdersRouter);
 router.use(distributorOffersRouter);
+router.use(auditRouter);
+router.use(backupRouter);
+router.use(loyaltyRouter);
+router.use(returnsRouter);
 
 export default router;

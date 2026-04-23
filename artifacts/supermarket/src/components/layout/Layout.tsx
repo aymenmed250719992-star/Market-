@@ -21,6 +21,9 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Menu,
+  Undo2,
+  ScrollText,
+  Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
@@ -60,7 +63,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/employees", label: "الموظفين", icon: UsersRound, roles: ["admin"] },
     { href: "/salaries", label: "الرواتب", icon: Banknote, roles: ["admin"] },
     { href: "/shortages", label: "النواقص والتوالف", icon: AlertTriangle, roles: ["admin", "buyer", "worker"] },
+    { href: "/returns", label: "المرتجعات", icon: Undo2, roles: ["admin", "cashier"] },
     { href: "/reports", label: "التقارير", icon: History, roles: ["admin", "cashier"] },
+    { href: "/audit", label: "سجل التدقيق", icon: ScrollText, roles: ["admin"] },
+    { href: "/backup", label: "النسخ الاحتياطي", icon: Database, roles: ["admin"] },
   ];
 
   const visibleNavItems = navItems.filter((item) => item.roles.includes(user.role));

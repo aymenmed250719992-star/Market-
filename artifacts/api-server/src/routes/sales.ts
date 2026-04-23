@@ -2,6 +2,8 @@ import { Router, type IRouter } from "express";
 import { firestore, nextId, tsToDate } from "../lib/firebase";
 import { salesCache, customersCache, usersCache } from "../lib/cache";
 import { CreateSaleBody, ListSalesQueryParams } from "@workspace/api-zod";
+import { logAudit } from "../lib/audit";
+import { awardCustomerPoints } from "./loyalty";
 
 const router: IRouter = Router();
 
@@ -138,7 +140,21 @@ router.post("/sales", async (req, res): Promise<void> => {
     createdAt: now,
   };
   await salesCache.set(id, data);
-  res.status(201).json(toSale(id, data));
+
+  // Award loyalty points (1 point per 100 DZD spent) to the customer when one is attached.
+  let earnedPoints = 0;
+  if (parsed.data.customerId) {
+    earnedPoints = await awardCustomerPoints(parsed.data.customerId, total);
+  }
+
+  await logAudit(req, "create", "sale", id, {
+    total,
+    paymentMethod: parsed.data.paymentMethod,
+    customerId: parsed.data.customerId ?? null,
+    earnedPoints,
+  });
+
+  res.status(201).json({ ...toSale(id, data), earnedPoints });
 });
 
 router.get("/sales/:id", async (req, res): Promise<void> => {

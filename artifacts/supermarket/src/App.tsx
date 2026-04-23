@@ -23,6 +23,9 @@ import CustomerPortal from "@/pages/customer-portal";
 import Register from "@/pages/register";
 import OnlineOrders from "@/pages/online-orders";
 import DistributorPortal from "@/pages/distributor-portal";
+import AuditLog from "@/pages/audit-log";
+import Backup from "@/pages/backup";
+import Returns from "@/pages/returns";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
 
@@ -124,6 +127,15 @@ function Router() {
       </Route>
       <Route path="/distributor">
         <ProtectedRoute component={DistributorPortal} roles={["admin", "distributor"]} />
+      </Route>
+      <Route path="/returns">
+        <ProtectedRoute component={Returns} roles={["admin", "cashier"]} />
+      </Route>
+      <Route path="/audit">
+        <ProtectedRoute component={AuditLog} roles={["admin"]} />
+      </Route>
+      <Route path="/backup">
+        <ProtectedRoute component={Backup} roles={["admin"]} />
       </Route>
       <Route>
         <Layout>
