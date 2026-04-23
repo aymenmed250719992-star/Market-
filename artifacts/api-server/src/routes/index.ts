@@ -22,6 +22,11 @@ import returnsRouter from "./returns";
 import analyticsRouter from "./analytics";
 import priceSuggestionsRouter from "./price-suggestions";
 import stockoutPredictionRouter from "./stockout-prediction";
+import alertsRouter from "./alerts";
+import publicRouter from "./public";
+import autoBackupRouter from "./auto-backup-routes";
+import autoCategorizeRouter from "./auto-categorize";
+import securityRouter from "./security";
 
 const router: IRouter = Router();
 
@@ -48,5 +53,10 @@ router.use(returnsRouter);
 router.use(analyticsRouter);
 router.use(priceSuggestionsRouter);
 router.use(stockoutPredictionRouter);
+router.use(alertsRouter);
+router.use(publicRouter);
+router.use(autoBackupRouter);
+router.use(autoCategorizeRouter);
+router.use(securityRouter);
 
 export default router;

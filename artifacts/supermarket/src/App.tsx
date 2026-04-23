@@ -29,6 +29,11 @@ import Returns from "@/pages/returns";
 import Analytics from "@/pages/analytics";
 import PriceSuggestions from "@/pages/price-suggestions";
 import StockoutPrediction from "@/pages/stockout-prediction";
+import AutoCategorize from "@/pages/auto-categorize";
+import Labels from "@/pages/labels";
+import OffersPublic from "@/pages/offers-public";
+import EndOfDay from "@/pages/end-of-day";
+import SecurityPin from "@/pages/security-pin";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
 
@@ -88,6 +93,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/customer" component={CustomerPortal} />
+      <Route path="/offers" component={OffersPublic} />
       <Route path="/" component={HomeRedirect} />
       <Route path="/dashboard">
         <ProtectedRoute component={Dashboard} roles={["admin", "cashier", "buyer", "worker"]} />
@@ -148,6 +154,18 @@ function Router() {
       </Route>
       <Route path="/stockout-prediction">
         <ProtectedRoute component={StockoutPrediction} roles={["admin", "buyer"]} />
+      </Route>
+      <Route path="/auto-categorize">
+        <ProtectedRoute component={AutoCategorize} roles={["admin"]} />
+      </Route>
+      <Route path="/labels">
+        <ProtectedRoute component={Labels} roles={["admin", "buyer", "worker"]} />
+      </Route>
+      <Route path="/end-of-day">
+        <ProtectedRoute component={EndOfDay} roles={["admin", "cashier"]} />
+      </Route>
+      <Route path="/security-pin">
+        <ProtectedRoute component={SecurityPin} roles={["admin"]} />
       </Route>
       <Route>
         <Layout>

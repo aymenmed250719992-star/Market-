@@ -589,7 +589,25 @@ export default function POS() {
             </div>
           )}
           <DialogFooter className="gap-2">
-            <button onClick={() => window.print()} className="flex-1 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded font-bold text-sm">🖨 طباعة الفاتورة</button>
+            <button onClick={() => window.print()} className="flex-1 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded font-bold text-sm">🖨 طباعة</button>
+            <button
+              onClick={() => {
+                if (!lastSale) return;
+                const lines = [
+                  `فاتورة #${lastSale.id ?? ""}`,
+                  ...(lastSale.items ?? []).map((it: any) => `• ${it.name} × ${it.quantity} = ${it.total} دج`),
+                  `------`,
+                  `الإجمالي: ${lastSale.total} دج`,
+                  `شكراً لزيارتكم 🌹`,
+                ];
+                const text = encodeURIComponent(lines.join("\n"));
+                const phone = (customers ?? []).find((c: any) => String(c.id) === customerId)?.phone?.replace(/\D/g, "") ?? "";
+                const url = phone ? `https://wa.me/${phone.startsWith("0") ? "213" + phone.slice(1) : phone}?text=${text}` : `https://wa.me/?text=${text}`;
+                window.open(url, "_blank");
+              }}
+              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-sm"
+              data-testid="button-send-whatsapp"
+            >إرسال واتساب</button>
             <button onClick={() => setReceiptOpen(false)} className="flex-1 py-2 bg-gray-200 hover:bg-gray-300 text-black rounded font-bold text-sm">إغلاق</button>
           </DialogFooter>
         </DialogContent>

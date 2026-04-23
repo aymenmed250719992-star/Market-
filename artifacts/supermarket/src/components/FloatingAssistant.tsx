@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, X, EyeOff, Send, Sparkles, Mic, MicOff } from "lucide-react";
+import { Bot, X, EyeOff, Send, Sparkles, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface ChatMessage {
@@ -42,8 +42,22 @@ export function FloatingAssistant() {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
+  const [speakOn, setSpeakOn] = useState<boolean>(() => localStorage.getItem("assistant.speak") === "1");
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  useEffect(() => { localStorage.setItem("assistant.speak", speakOn ? "1" : "0"); }, [speakOn]);
+
+  const speak = (text: string) => {
+    if (!speakOn || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text.slice(0, 600));
+      u.lang = "ar-SA";
+      u.rate = 1;
+      window.speechSynthesis.speak(u);
+    } catch { /* ignore */ }
+  };
 
   const SR: any = (typeof window !== "undefined") && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
   const voiceSupported = !!SR;
@@ -104,6 +118,7 @@ export function FloatingAssistant() {
       });
       const data = await res.json();
       setChat((p) => [...p, { role: "ai", text: data.answer ?? "—", products: data.products, provider: data.provider, executedTools: data.executedTools }]);
+      if (data.answer) speak(data.answer);
     } catch {
       setChat((p) => [...p, { role: "ai", text: "تعذّر الاتصال بالمساعد. حاول مجدداً." }]);
     } finally {
@@ -158,6 +173,14 @@ export function FloatingAssistant() {
           <span>المساعد الذكي</span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setSpeakOn(!speakOn)}
+            title={speakOn ? "إيقاف القراءة الصوتية" : "تفعيل القراءة الصوتية"}
+            className={`h-7 w-7 rounded flex items-center justify-center ${speakOn ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "hover:bg-muted text-muted-foreground"}`}
+            data-testid="button-toggle-speak"
+          >
+            {speakOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </button>
           <button
             onClick={() => setOpen(false)}
             title="تصغير"

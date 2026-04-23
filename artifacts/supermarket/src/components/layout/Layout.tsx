@@ -27,10 +27,16 @@ import {
   BarChart3,
   Lightbulb,
   TrendingDown,
+  Sparkles,
+  Printer,
+  FileText,
+  Shield,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { FloatingAssistant } from "@/components/FloatingAssistant";
+import { AlertsBanner } from "@/components/AlertsBanner";
 
 const SIDEBAR_KEY = "sidebar.collapsed";
 
@@ -71,8 +77,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/analytics", label: "تحليلات ذكية", icon: BarChart3, roles: ["admin"] },
     { href: "/price-suggestions", label: "اقتراحات الأسعار", icon: Lightbulb, roles: ["admin"] },
     { href: "/stockout-prediction", label: "توقع نفاد المخزون", icon: TrendingDown, roles: ["admin", "buyer"] },
+    { href: "/end-of-day", label: "تقرير نهاية اليوم", icon: FileText, roles: ["admin", "cashier"] },
+    { href: "/labels", label: "ملصقات الأسعار", icon: Printer, roles: ["admin", "buyer", "worker"] },
+    { href: "/auto-categorize", label: "تصنيف ذكي", icon: Sparkles, roles: ["admin"] },
     { href: "/audit", label: "سجل التدقيق", icon: ScrollText, roles: ["admin"] },
     { href: "/backup", label: "النسخ الاحتياطي", icon: Database, roles: ["admin"] },
+    { href: "/security-pin", label: "رمز PIN للأمان", icon: Shield, roles: ["admin"] },
+    { href: "/offers", label: "صفحة العروض العامة", icon: Tag, roles: ["admin"] },
   ];
 
   const visibleNavItems = navItems.filter((item) => item.roles.includes(user.role));
@@ -161,6 +172,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
+        <AlertsBanner />
         <div className="flex-1 overflow-y-auto p-6 print:p-0 print:overflow-visible">
           {children}
         </div>
