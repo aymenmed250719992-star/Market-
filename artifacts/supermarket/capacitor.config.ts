@@ -1,6 +1,6 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-const remoteUrl = process.env.CAP_SERVER_URL ?? "https://YOUR-DEPLOYED-URL.replit.app";
+const remoteUrl = process.env.CAP_SERVER_URL ?? "https://market--robox250719992.replit.app";
 
 const config: CapacitorConfig = {
   appId: "dz.supermarket.manager",
