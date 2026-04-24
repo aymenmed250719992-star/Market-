@@ -109,25 +109,46 @@ function calcRetailFromCarton(cartonWholesale: number, unitsPerCarton: number, m
   return { unitWholesale, retail };
 }
 
+const nullToUndef = <T extends z.ZodTypeAny>(s: T) =>
+  z.preprocess((v) => (v === null || v === "" ? undefined : v), s.optional());
+
 const CreateProductBody = z.object({
-  barcode: z.string().optional(),
-  cartonBarcode: z.string().optional(),
+  barcode: nullToUndef(z.string()),
+  cartonBarcode: nullToUndef(z.string()),
   name: z.string().min(1),
   category: z.string().min(1),
   wholesalePrice: z.number().positive(),
-  unitWholesalePrice: z.number().positive().optional(),
+  unitWholesalePrice: nullToUndef(z.number().positive()),
   retailPrice: z.number().positive(),
-  profitMargin: z.number().min(0).max(100).default(15),
-  stock: z.number().int().min(0).default(0),
-  shelfStock: z.number().int().min(0).default(0),
-  warehouseStock: z.number().int().min(0).default(0),
+  profitMargin: z.preprocess(
+    (v) => (v === null || v === "" || v === undefined ? 15 : v),
+    z.number().min(0).max(100),
+  ),
+  stock: z.preprocess(
+    (v) => (v === null || v === undefined ? 0 : v),
+    z.number().int().min(0),
+  ),
+  shelfStock: z.preprocess(
+    (v) => (v === null || v === undefined ? 0 : v),
+    z.number().int().min(0),
+  ),
+  warehouseStock: z.preprocess(
+    (v) => (v === null || v === undefined ? 0 : v),
+    z.number().int().min(0),
+  ),
   unit: z.enum(["piece", "carton", "kg"]).default("piece"),
-  unitsPerCarton: z.number().int().positive().optional(),
-  cartonSize: z.number().int().positive().optional(),
-  expiryDate: z.string().optional(),
-  supplier: z.string().optional(),
-  lowStockThreshold: z.number().int().min(0).default(5),
-  lowWarehouseThreshold: z.number().int().min(0).default(2),
+  unitsPerCarton: nullToUndef(z.number().int().positive()),
+  cartonSize: nullToUndef(z.number().int().positive()),
+  expiryDate: nullToUndef(z.string()),
+  supplier: nullToUndef(z.string()),
+  lowStockThreshold: z.preprocess(
+    (v) => (v === null || v === undefined ? 5 : v),
+    z.number().int().min(0),
+  ),
+  lowWarehouseThreshold: z.preprocess(
+    (v) => (v === null || v === undefined ? 2 : v),
+    z.number().int().min(0),
+  ),
 });
 
 const UpdateProductBody = CreateProductBody.partial();
