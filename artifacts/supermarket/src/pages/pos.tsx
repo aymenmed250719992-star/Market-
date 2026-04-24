@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, LogOut, Search } from "lucide-react";
+import { AlertCircle, LogOut, Search, ScanLine } from "lucide-react";
+import { scanBarcodeNative, isNativeApp } from "@/lib/native-scanner";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -301,6 +302,32 @@ export default function POS() {
               />
               <button onClick={() => setSearchOpen(true)} className="bg-[#333] hover:bg-[#444] text-white border border-[#555] rounded px-2 py-1 text-xs whitespace-nowrap">
                 <Search className="h-3 w-3 inline" /> بحث
+              </button>
+              <button
+                onClick={async () => {
+                  if (!isNativeApp()) {
+                    toast({ title: "ماسح الكاميرا", description: "متاح في تطبيق الموبايل فقط (Android/iOS)" });
+                    return;
+                  }
+                  try {
+                    const code = await scanBarcodeNative();
+                    if (code) {
+                      setBarcodeInput(code);
+                      setTimeout(() => {
+                        const ev = new KeyboardEvent("keydown", { key: "Enter" });
+                        barcodeRef.current?.dispatchEvent(ev);
+                        handleBarcodeSearch({ key: "Enter", preventDefault: () => {} } as any);
+                      }, 50);
+                    }
+                  } catch (e: any) {
+                    toast({ variant: "destructive", title: "فشل المسح", description: e.message ?? String(e) });
+                  }
+                }}
+                className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-500 rounded px-2 py-1 text-xs whitespace-nowrap"
+                data-testid="button-scan-camera"
+                title="مسح بالكاميرا"
+              >
+                <ScanLine className="h-3 w-3 inline" /> كاميرا
               </button>
             </div>
           </div>

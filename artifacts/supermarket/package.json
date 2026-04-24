@@ -87,6 +87,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^7.5.0",
     "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.6.2",
     "@capacitor/haptics": "^7.0.5",

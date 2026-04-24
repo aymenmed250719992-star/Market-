@@ -425,6 +425,9 @@ importers:
 
   artifacts/supermarket:
     dependencies:
+      '@capacitor-mlkit/barcode-scanning':
+        specifier: ^7.5.0
+        version: 7.5.0(@capacitor/core@7.6.2)
       '@capacitor/app':
         specifier: ^7.1.2
         version: 7.1.2(@capacitor/core@7.6.2)
@@ -1236,6 +1239,11 @@ packages:
   '@babel/types@7.29.0':
     resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
+
+  '@capacitor-mlkit/barcode-scanning@7.5.0':
+    resolution: {integrity: sha512-DBWRykYYLW0YMj/UzlQ0sVGn83mwGAJsbZVxFsd44pppEEy88OO04lxy9Esv5QpnNBIKPjSIqLWmSLuhoFGPaQ==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
 
   '@capacitor/android@7.6.2':
     resolution: {integrity: sha512-zRIn10uTPbOQaFVRqkTGKwrrDypmn3L3I/x4XZSVLiCYt3zs8MUCPoqrMudNvOD+s6nQ5m0cX4GW8JRpMxKOkQ==}
@@ -7079,6 +7087,10 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
+
+  '@capacitor-mlkit/barcode-scanning@7.5.0(@capacitor/core@7.6.2)':
+    dependencies:
+      '@capacitor/core': 7.6.2
 
   '@capacitor/android@7.6.2(@capacitor/core@7.6.2)':
     dependencies:
