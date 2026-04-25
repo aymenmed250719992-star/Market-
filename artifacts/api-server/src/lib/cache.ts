@@ -131,3 +131,4 @@ export const tasksCache = new CollectionCache("tasks");
 export const salariesCache = new CollectionCache("salaries");
 export const onlineOrdersCache = new CollectionCache("online_orders");
 export const distributorOffersCache = new CollectionCache("distributor_offers");
+export const promotionsCache = new CollectionCache("promotions");

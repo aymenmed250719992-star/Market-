@@ -41,6 +41,7 @@ const ALLOWED_COLLECTIONS = new Set([
   "price_changes",
   "sale_returns",
   "returns",
+  "promotions",
 ]);
 
 export function tableForCollection(name: string): string {

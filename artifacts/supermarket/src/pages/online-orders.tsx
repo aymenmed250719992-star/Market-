@@ -41,13 +41,19 @@ export default function OnlineOrders() {
 
   const updateOrder = async (id: number, payload: Record<string, unknown>) => {
     try {
-      await fetchJson(`/api/online-orders/${id}`, {
+      const updated = await fetchJson<any>(`/api/online-orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       queryClient.invalidateQueries({ queryKey: ["online-orders"] });
       toast({ title: "تم التحديث", description: "تم تحديث الطلب بنجاح" });
+
+      // If the API returned a ready WhatsApp link for the customer, offer to open it
+      if (updated?.notifyWhatsAppUrl) {
+        const ok = window.confirm("هل تريد إرسال إشعار للزبون عبر واتساب الآن؟");
+        if (ok) window.open(updated.notifyWhatsAppUrl, "_blank", "noopener");
+      }
     } catch (error: any) {
       toast({ variant: "destructive", title: "خطأ", description: error.message });
     }

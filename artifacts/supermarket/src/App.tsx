@@ -40,6 +40,7 @@ const Labels = lazy(() => import("@/pages/labels"));
 const OffersPublic = lazy(() => import("@/pages/offers-public"));
 const EndOfDay = lazy(() => import("@/pages/end-of-day"));
 const SecurityPin = lazy(() => import("@/pages/security-pin"));
+const Promotions = lazy(() => import("@/pages/promotions"));
 
 function PageLoader() {
   return (
@@ -178,6 +179,9 @@ function Router() {
       </Route>
       <Route path="/security-pin">
         <ProtectedRoute component={SecurityPin} roles={["admin"]} />
+      </Route>
+      <Route path="/promotions">
+        <ProtectedRoute component={Promotions} roles={["admin"]} />
       </Route>
       <Route>
         <Layout>

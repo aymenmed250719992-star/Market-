@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import type { PoolClient } from "pg";
 import { pool, pgQuery, tableForCollection } from "./pg";
 import { logger } from "./logger";
+import { migrateSchema } from "./migrate";
 
 // ─── FieldValue (mimics firebase-admin/firestore FieldValue.increment) ────────
 class IncrementSentinel {
@@ -448,9 +449,10 @@ async function seedIfEmpty() {
   }
 }
 
-/** Promise that resolves once seeding is complete; allows caches to wait for it. */
+/** Promise that resolves once schema migration + seeding are complete; allows caches to wait for it. */
 export const seedReady: Promise<void> = (async () => {
   try {
+    await migrateSchema();
     await seedIfEmpty();
   } catch (e) {
     logger.error({ err: e }, "Seed failed");

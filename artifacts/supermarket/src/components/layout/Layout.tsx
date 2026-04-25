@@ -32,11 +32,13 @@ import {
   FileText,
   Shield,
   Tag,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { FloatingAssistant } from "@/components/FloatingAssistant";
 import { AlertsBanner } from "@/components/AlertsBanner";
+import { GlobalSearch } from "@/components/global-search";
 
 const SIDEBAR_KEY = "sidebar.collapsed";
 
@@ -84,6 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/backup", label: "النسخ الاحتياطي", icon: Database, roles: ["admin"] },
     { href: "/security-pin", label: "رمز PIN للأمان", icon: Shield, roles: ["admin"] },
     { href: "/offers", label: "صفحة العروض العامة", icon: Tag, roles: ["admin"] },
+    { href: "/promotions", label: "العروض الترويجية", icon: Sparkles, roles: ["admin"] },
   ];
 
   const visibleNavItems = navItems.filter((item) => item.roles.includes(user.role));
@@ -176,6 +179,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="h-12 flex items-center justify-between px-4 border-b border-border bg-background/50 print:hidden">
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted px-3 py-1.5 rounded-md transition-colors min-w-[260px] justify-between"
+            data-testid="button-open-search"
+          >
+            <span className="flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              ابحث في كل التطبيق…
+            </span>
+            <kbd className="hidden sm:inline-flex items-center gap-1 rounded bg-background px-1.5 py-0.5 text-[10px] font-mono border border-border">
+              Ctrl K
+            </kbd>
+          </button>
+          <div className="text-xs text-muted-foreground hidden md:block">
+            {new Date().toLocaleDateString("ar-DZ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          </div>
+        </div>
         <AlertsBanner />
         <div className="flex-1 overflow-y-auto p-6 print:p-0 print:overflow-visible">
           {children}
@@ -183,6 +204,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </main>
 
       <FloatingAssistant />
+      <GlobalSearch />
     </div>
   );
 }

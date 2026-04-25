@@ -37,6 +37,25 @@ function toOrder(id: number, data: any) {
   };
 }
 
+const STATUS_MESSAGES_AR: Record<string, (id: number, name: string) => string> = {
+  confirmed: (id, name) => `مرحبا ${name}، تم تأكيد طلبك رقم #${id} في Super Supermarché. سنبدأ التحضير قريباً.`,
+  preparing: (id, name) => `${name}، طلبك #${id} قيد التحضير الآن. شكراً لانتظارك.`,
+  delivering: (id, name) => `${name}، طلبك #${id} في الطريق إليك الآن. الرجاء التواجد لاستلامه.`,
+  completed: (id, name) => `${name}، تم تسليم طلبك #${id} بنجاح. شكراً لتسوقك من Super Supermarché!`,
+  cancelled: (id, name) => `${name}، نأسف لإبلاغك بأن طلبك #${id} تم إلغاؤه. للاستفسار اتصل بنا.`,
+};
+
+function buildOrderWhatsAppUrl(order: any, status: string): string | null {
+  const builder = STATUS_MESSAGES_AR[status];
+  if (!builder) return null;
+  const phone = String(order.phone ?? "").replace(/\D/g, "");
+  if (!phone) return null;
+  // Normalize to international: if starts with 0, replace with 213 (Algeria)
+  const intl = phone.startsWith("0") ? `213${phone.slice(1)}` : phone;
+  const message = builder(Number(order.id ?? 0), String(order.customerName ?? "زبوننا الكريم"));
+  return `https://wa.me/${intl}?text=${encodeURIComponent(message)}`;
+}
+
 async function getProductsApi() {
   const mod = await import("./products");
   return mod.productsCacheApi;
@@ -172,7 +191,16 @@ router.patch("/online-orders/:id", async (req, res): Promise<void> => {
   }
 
   const merged = await onlineOrdersCache.update(idNum, updates);
-  res.json(toOrder(idNum, merged ?? { ...existing, ...updates }));
+  const finalData = merged ?? { ...existing, ...updates };
+  const result: any = toOrder(idNum, finalData);
+
+  // If status changed, attach a ready-to-open WhatsApp URL the client can use to notify the customer
+  if (parsed.data.status && parsed.data.status !== existing.status) {
+    const url = buildOrderWhatsAppUrl({ ...finalData, id: idNum }, parsed.data.status);
+    if (url) result.notifyWhatsAppUrl = url;
+  }
+
+  res.json(result);
 });
 
 export default router;
