@@ -12,8 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, LogOut, Search, ScanLine } from "lucide-react";
+import { AlertCircle, LogOut, Search, ScanLine, Users, Trash2 } from "lucide-react";
 import { scanBarcodeNative, isNativeApp } from "@/lib/native-scanner";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,28 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 interface CartItem extends Product {
   cartQuantity: number;
 }
+
+interface CartState {
+  items: CartItem[];
+  discount: number;
+  customerId: string;
+  paymentMethod: CreateSaleBodyPaymentMethod;
+  saleCounter: number;
+  selectedRow: number | null;
+  numpadValue: string;
+}
+
+const NUM_CARTS = 3;
+
+const createEmptyCart = (): CartState => ({
+  items: [],
+  discount: 0,
+  customerId: "",
+  paymentMethod: "cash",
+  saleCounter: Math.floor(20000 + Math.random() * 999),
+  selectedRow: null,
+  numpadValue: "",
+});
 
 export default function POS() {
   const { user } = useAuth();
@@ -32,21 +55,62 @@ export default function POS() {
   const { data: customers } = useListCustomers();
   const createSale = useCreateSale();
 
-  const [cart, setCart] = useState<CartItem[]>([]);
+  // ── Multi-cart state: cashier can serve up to 3 customers in parallel ──
+  const [carts, setCarts] = useState<CartState[]>(() =>
+    Array.from({ length: NUM_CARTS }, () => createEmptyCart())
+  );
+  const [activeIdx, setActiveIdx] = useState(0);
+  const active = carts[activeIdx];
+
+  const cart = active.items;
+  const discount = active.discount;
+  const customerId = active.customerId;
+  const paymentMethod = active.paymentMethod;
+  const saleCounter = active.saleCounter;
+  const selectedRow = active.selectedRow;
+  const numpadValue = active.numpadValue;
+
+  const updateActive = (updater: (c: CartState) => CartState) =>
+    setCarts((prev) => prev.map((c, i) => (i === activeIdx ? updater(c) : c)));
+
+  const setCart = (next: CartItem[] | ((prev: CartItem[]) => CartItem[])) =>
+    updateActive((c) => ({
+      ...c,
+      items: typeof next === "function" ? (next as (p: CartItem[]) => CartItem[])(c.items) : next,
+    }));
+  const setDiscount = (v: number) => updateActive((c) => ({ ...c, discount: v }));
+  const setCustomerId = (v: string) => updateActive((c) => ({ ...c, customerId: v }));
+  const setPaymentMethod = (v: CreateSaleBodyPaymentMethod) =>
+    updateActive((c) => ({ ...c, paymentMethod: v }));
+  const setSaleCounter = (v: number | ((prev: number) => number)) =>
+    updateActive((c) => ({
+      ...c,
+      saleCounter: typeof v === "function" ? (v as (p: number) => number)(c.saleCounter) : v,
+    }));
+  const setSelectedRow = (v: number | null | ((prev: number | null) => number | null)) =>
+    updateActive((c) => ({
+      ...c,
+      selectedRow:
+        typeof v === "function" ? (v as (p: number | null) => number | null)(c.selectedRow) : v,
+    }));
+  const setNumpadValue = (v: string | ((prev: string) => string)) =>
+    updateActive((c) => ({
+      ...c,
+      numpadValue: typeof v === "function" ? (v as (p: string) => string)(c.numpadValue) : v,
+    }));
+
+  const clearAllCarts = () =>
+    setCarts(Array.from({ length: NUM_CARTS }, () => createEmptyCart()));
+
   const [barcodeInput, setBarcodeInput] = useState("");
-  const [customerId, setCustomerId] = useState<string>("");
-  const [discount, setDiscount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<CreateSaleBodyPaymentMethod>("cash");
-  const [numpadValue, setNumpadValue] = useState("");
-  const [selectedRow, setSelectedRow] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [saleCounter, setSaleCounter] = useState(() => Math.floor(20000 + Math.random() * 999));
   const [kgModalOpen, setKgModalOpen] = useState(false);
   const [selectedKgProduct, setSelectedKgProduct] = useState<Product | null>(null);
   const [kgWeight, setKgWeight] = useState("");
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [lastSale, setLastSale] = useState<any>(null);
+  const [webScannerOpen, setWebScannerOpen] = useState(false);
 
   // Shift state
   const [activeShift, setActiveShift] = useState<any>(null);
@@ -91,7 +155,7 @@ export default function POS() {
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    onSuccess: () => { setActiveShift(null); setCloseShiftOpen(false); setShiftModalOpen(true); setCart([]); toast({ title: "تم إغلاق الوردية" }); },
+    onSuccess: () => { setActiveShift(null); setCloseShiftOpen(false); setShiftModalOpen(true); clearAllCarts(); setActiveIdx(0); toast({ title: "تم إغلاق الوردية" }); },
     onError: (e: any) => toast({ variant: "destructive", title: "خطأ", description: e.message }),
   });
 
@@ -161,13 +225,49 @@ export default function POS() {
   };
 
   const newSale = () => {
-    setCart([]);
-    setDiscount(0);
-    setCustomerId("");
-    setNumpadValue("");
-    setSelectedRow(null);
-    setSaleCounter(p => p + 1);
+    updateActive((c) => ({
+      ...createEmptyCart(),
+      saleCounter: c.saleCounter + 1,
+    }));
     barcodeRef.current?.focus();
+  };
+
+  const switchCart = (idx: number) => {
+    if (idx < 0 || idx >= NUM_CARTS) return;
+    setActiveIdx(idx);
+    setBarcodeInput("");
+    setTimeout(() => barcodeRef.current?.focus(), 0);
+  };
+
+  const clearCartAt = (idx: number) => {
+    setCarts((prev) => prev.map((c, i) => (i === idx ? createEmptyCart() : c)));
+  };
+
+  // Web camera fallback: when not on a native app, open the browser scanner
+  // dialog which uses getUserMedia to request permission from the device owner.
+  const handleCameraScan = async () => {
+    if (!isNativeApp()) {
+      setWebScannerOpen(true);
+      return;
+    }
+    try {
+      const code = await scanBarcodeNative();
+      if (code) {
+        processScannedCode(code);
+      }
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "فشل المسح", description: e.message ?? String(e) });
+    }
+  };
+
+  const processScannedCode = (code: string) => {
+    const found = products?.find((p) => p.barcode === code || p.name.includes(code));
+    if (found) {
+      addProductToCart(found);
+    } else {
+      setBarcodeInput(code);
+      toast({ variant: "destructive", title: "المنتج غير موجود", description: `باركود: ${code}` });
+    }
   };
 
   const handleCompleteSale = async () => {
@@ -271,6 +371,54 @@ export default function POS() {
         </div>
       </div>
 
+      {/* ── CART TABS (multi-customer) ── */}
+      <div className="flex items-stretch px-2 pt-2 pb-0 gap-1 bg-[#0d0d0d] border-b border-[#222] shrink-0">
+        <div className="flex items-center gap-1 text-xs text-gray-500 px-2">
+          <Users className="h-3 w-3" />
+          <span>زبائن نشطون:</span>
+        </div>
+        {carts.map((c, idx) => {
+          const isActive = idx === activeIdx;
+          const cartTotal = Math.max(0, c.items.reduce((s, i) => s + i.retailPrice * i.cartQuantity, 0) - c.discount);
+          const customerName = customers?.find((cu) => String(cu.id) === c.customerId)?.name;
+          const itemCount = c.items.reduce((s, i) => s + i.cartQuantity, 0);
+          return (
+            <div
+              key={idx}
+              onClick={() => switchCart(idx)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-t cursor-pointer border border-b-0 transition-colors min-w-[150px] ${
+                isActive
+                  ? "bg-[#1a3a1a] border-green-700 text-white"
+                  : "bg-[#1a1a1a] border-[#2a2a2a] text-gray-400 hover:bg-[#222]"
+              }`}
+              data-testid={`tab-cart-${idx}`}
+            >
+              <div className="flex flex-col flex-1 leading-tight">
+                <span className="text-xs font-bold">
+                  {customerName ?? `زبون ${idx + 1}`}
+                </span>
+                <span className={`text-[10px] ${isActive ? "text-green-300" : "text-gray-500"}`}>
+                  {itemCount > 0 ? `${itemCount} قطعة · ${cartTotal.toFixed(0)} دج` : "فارغة"}
+                </span>
+              </div>
+              {(c.items.length > 0 || c.discount > 0 || c.customerId) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`مسح سلة ${customerName ?? `زبون ${idx + 1}`}؟`)) clearCartAt(idx);
+                  }}
+                  className="text-red-400 hover:text-red-300"
+                  title="مسح هذه السلة"
+                  data-testid={`button-clear-cart-${idx}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       {/* ── MAIN BODY ── */}
       <div className="flex flex-1 overflow-hidden">
 
@@ -304,25 +452,7 @@ export default function POS() {
                 <Search className="h-3 w-3 inline" /> بحث
               </button>
               <button
-                onClick={async () => {
-                  if (!isNativeApp()) {
-                    toast({ title: "ماسح الكاميرا", description: "متاح في تطبيق الموبايل فقط (Android/iOS)" });
-                    return;
-                  }
-                  try {
-                    const code = await scanBarcodeNative();
-                    if (code) {
-                      setBarcodeInput(code);
-                      setTimeout(() => {
-                        const ev = new KeyboardEvent("keydown", { key: "Enter" });
-                        barcodeRef.current?.dispatchEvent(ev);
-                        handleBarcodeSearch({ key: "Enter", preventDefault: () => {} } as any);
-                      }, 50);
-                    }
-                  } catch (e: any) {
-                    toast({ variant: "destructive", title: "فشل المسح", description: e.message ?? String(e) });
-                  }
-                }}
+                onClick={handleCameraScan}
                 className="bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-500 rounded px-2 py-1 text-xs whitespace-nowrap"
                 data-testid="button-scan-camera"
                 title="مسح بالكاميرا"
@@ -543,6 +673,13 @@ export default function POS() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ── WEB CAMERA SCANNER (browser permission prompt) ── */}
+      <BarcodeScanner
+        open={webScannerOpen}
+        onClose={() => setWebScannerOpen(false)}
+        onDetected={(code) => processScannedCode(code)}
+      />
 
       {/* ── RECEIPT DIALOG ── */}
       <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>

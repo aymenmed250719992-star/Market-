@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Search, ShoppingBag, Plus, Minus, Receipt, NotebookTabs, LogIn, UserPlus } from "lucide-react";
+import { Search, ShoppingBag, Plus, Minus, Receipt, NotebookTabs, LogIn, UserPlus, MessageCircle } from "lucide-react";
+import { STORE_WHATSAPP, buildWhatsAppUrl } from "@/lib/store-config";
 
 type Product = {
   id: number;
@@ -112,6 +113,27 @@ export default function CustomerPortal() {
               تسجيل حساب جديد
             </Button>
           </a>
+        </div>
+
+        <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/10 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+          <div className="flex items-start gap-3">
+            <MessageCircle className="h-7 w-7 text-emerald-500 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-base">التسجيل وفتح الحسابات يكون عبر واتساب</h3>
+              <p className="text-sm text-muted-foreground">
+                لإنشاء حساب جديد أو استفسار، تواصل معنا مباشرة على واتساب{" "}
+                <span dir="ltr" className="font-mono">{STORE_WHATSAPP}</span>
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => window.open(buildWhatsAppUrl("السلام عليكم،\nأرغب في فتح حساب جديد في متجر الجزائر."), "_blank")}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white shrink-0"
+            data-testid="button-portal-whatsapp"
+          >
+            <MessageCircle className="ml-2 h-4 w-4" />
+            تواصل عبر واتساب
+          </Button>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
