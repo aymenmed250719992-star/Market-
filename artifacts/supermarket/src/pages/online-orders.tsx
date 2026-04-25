@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -5,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingBag } from "lucide-react";
 import { format } from "date-fns";
+import { PaginationBar } from "@/components/pagination-bar";
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...options, credentials: "include" });
@@ -28,6 +30,14 @@ export default function OnlineOrders() {
   const { data: orders = [], isLoading } = useQuery({ queryKey: ["online-orders"], queryFn: () => fetchJson<any[]>("/api/online-orders") });
   const { data: users = [] } = useQuery({ queryKey: ["users-for-distributors"], queryFn: () => fetchJson<any[]>("/api/users") });
   const distributors = users.filter((user) => user.role === "distributor");
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const total = orders.length;
+  const pageRows = useMemo(
+    () => orders.slice((page - 1) * pageSize, page * pageSize),
+    [orders, page, pageSize],
+  );
 
   const updateOrder = async (id: number, payload: Record<string, unknown>) => {
     try {
@@ -73,7 +83,7 @@ export default function OnlineOrders() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={9} className="text-center py-8">جاري التحميل...</TableCell></TableRow>
-            ) : orders.map((order) => (
+            ) : pageRows.map((order) => (
               <TableRow key={order.id}>
                 <TableCell className="font-bold">#{order.id}</TableCell>
                 <TableCell>{order.customerName}</TableCell>
@@ -112,6 +122,15 @@ export default function OnlineOrders() {
             )}
           </TableBody>
         </Table>
+        {!isLoading && total > 0 && (
+          <PaginationBar
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
     </div>
   );

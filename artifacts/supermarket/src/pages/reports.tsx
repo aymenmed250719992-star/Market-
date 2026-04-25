@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useListSales, useListUsers, useListCustomers } from "@workspace/api-client-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,6 +10,7 @@ import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { History, Banknote, ShoppingCart, UserCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PaginationBar } from "@/components/pagination-bar";
 
 export default function Reports() {
   const { user } = useAuth();
@@ -29,6 +30,15 @@ export default function Reports() {
 
   const { data: cashiers } = useListUsers();
   const { data: customers } = useListCustomers();
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const total = sales?.length || 0;
+  const pageRows = useMemo(
+    () => (sales || []).slice((page - 1) * pageSize, page * pageSize),
+    [sales, page, pageSize],
+  );
+  useEffect(() => { setPage(1); }, [dateFrom, dateTo, cashierId, customerId]);
 
   const totalRevenue = sales?.reduce((sum, sale) => sum + sale.total, 0) || 0;
   const totalDiscount = sales?.reduce((sum, sale) => sum + sale.discount, 0) || 0;
@@ -151,7 +161,7 @@ export default function Reports() {
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                 </TableRow>
               ))
-            ) : sales?.map((sale) => (
+            ) : pageRows.map((sale) => (
               <TableRow key={sale.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedSale(sale)}>
                 <TableCell>#{sale.id}</TableCell>
                 <TableCell>{format(new Date(sale.createdAt), "yyyy/MM/dd HH:mm")}</TableCell>
@@ -179,6 +189,15 @@ export default function Reports() {
             )}
           </TableBody>
         </Table>
+        {!salesLoading && total > 0 && (
+          <PaginationBar
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
 
       <Dialog open={!!selectedSale} onOpenChange={(open) => !open && setSelectedSale(null)}>

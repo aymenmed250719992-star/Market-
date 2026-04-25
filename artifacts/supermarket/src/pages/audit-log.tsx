@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollText, RefreshCw } from "lucide-react";
+import { PaginationBar } from "@/components/pagination-bar";
 
 type AuditEntry = {
   id: number;
@@ -45,6 +46,16 @@ export default function AuditLog() {
   const [loading, setLoading] = useState(true);
   const [filterEntity, setFilterEntity] = useState("");
   const [filterAction, setFilterAction] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+
+  const total = logs.length;
+  const pageRows = useMemo(
+    () => logs.slice((page - 1) * pageSize, page * pageSize),
+    [logs, page, pageSize],
+  );
+
+  useEffect(() => { setPage(1); }, [filterEntity, filterAction]);
 
   const load = async () => {
     setLoading(true);
@@ -144,7 +155,7 @@ export default function AuditLog() {
                 </TableCell>
               </TableRow>
             ) : (
-              logs.map((log) => (
+              pageRows.map((log) => (
                 <TableRow key={log.id} data-testid={`audit-row-${log.id}`}>
                   <TableCell dir="ltr" className="text-right text-xs">{new Date(log.createdAt).toLocaleString("ar-DZ")}</TableCell>
                   <TableCell>
@@ -170,6 +181,15 @@ export default function AuditLog() {
             )}
           </TableBody>
         </Table>
+        {!loading && total > 0 && (
+          <PaginationBar
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
     </div>
   );
