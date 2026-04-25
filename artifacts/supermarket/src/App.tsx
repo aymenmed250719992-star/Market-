@@ -5,37 +5,49 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/layout/Layout";
 import { InstallPrompt } from "@/components/install-prompt";
+import { Suspense, lazy, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 
+// Eager (entry pages, light)
 import Login from "@/pages/login";
-import Dashboard from "@/pages/dashboard";
-import Products from "@/pages/products";
-import POS from "@/pages/pos";
-import Customers from "@/pages/customers";
-import Employees from "@/pages/employees";
-import Salaries from "@/pages/salaries";
-import Shortages from "@/pages/shortages";
-import Reports from "@/pages/reports";
-import Shifts from "@/pages/shifts";
-import Tasks from "@/pages/tasks";
-import Expenses from "@/pages/expenses";
-import Advances from "@/pages/advances";
-import CustomerPortal from "@/pages/customer-portal";
-import Register from "@/pages/register";
-import OnlineOrders from "@/pages/online-orders";
-import DistributorPortal from "@/pages/distributor-portal";
-import AuditLog from "@/pages/audit-log";
-import Backup from "@/pages/backup";
-import Returns from "@/pages/returns";
-import Analytics from "@/pages/analytics";
-import PriceSuggestions from "@/pages/price-suggestions";
-import StockoutPrediction from "@/pages/stockout-prediction";
-import AutoCategorize from "@/pages/auto-categorize";
-import Labels from "@/pages/labels";
-import OffersPublic from "@/pages/offers-public";
-import EndOfDay from "@/pages/end-of-day";
-import SecurityPin from "@/pages/security-pin";
 import NotFound from "@/pages/not-found";
-import { useEffect } from "react";
+
+// Lazy-loaded route pages — loaded on demand for faster initial paint
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Products = lazy(() => import("@/pages/products"));
+const POS = lazy(() => import("@/pages/pos"));
+const Customers = lazy(() => import("@/pages/customers"));
+const Employees = lazy(() => import("@/pages/employees"));
+const Salaries = lazy(() => import("@/pages/salaries"));
+const Shortages = lazy(() => import("@/pages/shortages"));
+const Reports = lazy(() => import("@/pages/reports"));
+const Shifts = lazy(() => import("@/pages/shifts"));
+const Tasks = lazy(() => import("@/pages/tasks"));
+const Expenses = lazy(() => import("@/pages/expenses"));
+const Advances = lazy(() => import("@/pages/advances"));
+const CustomerPortal = lazy(() => import("@/pages/customer-portal"));
+const Register = lazy(() => import("@/pages/register"));
+const OnlineOrders = lazy(() => import("@/pages/online-orders"));
+const DistributorPortal = lazy(() => import("@/pages/distributor-portal"));
+const AuditLog = lazy(() => import("@/pages/audit-log"));
+const Backup = lazy(() => import("@/pages/backup"));
+const Returns = lazy(() => import("@/pages/returns"));
+const Analytics = lazy(() => import("@/pages/analytics"));
+const PriceSuggestions = lazy(() => import("@/pages/price-suggestions"));
+const StockoutPrediction = lazy(() => import("@/pages/stockout-prediction"));
+const AutoCategorize = lazy(() => import("@/pages/auto-categorize"));
+const Labels = lazy(() => import("@/pages/labels"));
+const OffersPublic = lazy(() => import("@/pages/offers-public"));
+const EndOfDay = lazy(() => import("@/pages/end-of-day"));
+const SecurityPin = lazy(() => import("@/pages/security-pin"));
+
+function PageLoader() {
+  return (
+    <div className="flex h-full min-h-[60vh] items-center justify-center text-muted-foreground gap-2">
+      <Loader2 className="h-5 w-5 animate-spin" /> جاري التحميل…
+    </div>
+  );
+}
 
 const queryClient = new QueryClient();
 
@@ -182,7 +194,9 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AuthProvider>
-            <Router />
+            <Suspense fallback={<PageLoader />}>
+              <Router />
+            </Suspense>
           </AuthProvider>
         </WouterRouter>
         <Toaster />

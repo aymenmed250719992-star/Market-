@@ -1,0 +1,17 @@
+{
+  "name": "Super Supermarché",
+  "short_name": "Supermarché",
+  "description": "إدارة ذكية للتجزئة",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0f14",
+  "theme_color": "#10b981",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

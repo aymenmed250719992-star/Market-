@@ -50,11 +50,16 @@ export default function Login() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(16,185,129,0.18),transparent_50%),radial-gradient(circle_at_70%_80%,rgba(245,158,11,0.12),transparent_50%)]" />
         <div className="relative z-10 max-w-lg w-full space-y-6">
           <div className="flex justify-center">
-            <div className="w-20 h-20 rounded-3xl bg-primary text-primary-foreground flex items-center justify-center shadow-2xl text-4xl">🏪</div>
+            <img
+              src={`${import.meta.env.BASE_URL}logo.png`}
+              alt="Super Supermarché"
+              className="w-full max-w-md h-auto object-contain drop-shadow-2xl"
+              loading="eager"
+              fetchPriority="high"
+            />
           </div>
           <div>
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tight">متجر الجزائر</h1>
-            <p className="mt-3 text-base sm:text-lg text-muted-foreground leading-7">
+            <p className="text-base sm:text-lg text-muted-foreground leading-7">
               متجرك الإلكتروني المتكامل: تسوّق، تابع طلباتك، وادفع عند الاستلام أو سجّل على الكرني.
             </p>
           </div>

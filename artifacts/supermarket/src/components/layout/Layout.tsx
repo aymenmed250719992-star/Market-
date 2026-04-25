@@ -104,8 +104,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="h-16 flex items-center justify-between px-3 border-b border-border">
           {!sidebarCollapsed && (
             <span className="text-xl font-bold flex items-center gap-2 truncate">
-              <span>🏪</span>
-              <span>متجر الجزائر</span>
+              <img
+                src={`${import.meta.env.BASE_URL}logo.png`}
+                alt="Super Supermarché"
+                className="h-9 w-9 object-contain"
+              />
+              <span>Super Supermarché</span>
             </span>
           )}
           <Button

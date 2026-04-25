@@ -57,9 +57,13 @@ export default function Register() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
           <div className="flex justify-center mb-4">
-            <span className="text-5xl">🏪</span>
+            <img
+              src={`${import.meta.env.BASE_URL}logo.png`}
+              alt="Super Supermarché"
+              className="h-24 w-24 object-contain drop-shadow-xl"
+            />
           </div>
-          <CardTitle className="text-3xl font-bold">متجر الجزائر</CardTitle>
+          <CardTitle className="text-3xl font-bold">Super Supermarché</CardTitle>
           <CardDescription>إنشاء حساب زبون جديد</CardDescription>
         </CardHeader>
         <CardContent>
