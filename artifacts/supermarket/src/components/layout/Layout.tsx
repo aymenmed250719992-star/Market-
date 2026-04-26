@@ -34,6 +34,7 @@ import {
   Tag,
   Search,
   Gift,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
@@ -89,6 +90,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/offers", label: "صفحة العروض العامة", icon: Tag, roles: ["admin"] },
     { href: "/promotions", label: "العروض الترويجية", icon: Sparkles, roles: ["admin"] },
     { href: "/loyalty-rewards", label: "مكافآت الولاء", icon: Gift, roles: ["admin", "cashier"] },
+    { href: "/stocktake", label: "الجرد والتدقيق", icon: ClipboardList, roles: ["admin", "buyer", "worker"] },
   ];
 
   const visibleNavItems = navItems.filter((item) => item.roles.includes(user.role));

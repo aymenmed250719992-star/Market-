@@ -28,6 +28,7 @@ import autoBackupRouter from "./auto-backup-routes";
 import autoCategorizeRouter from "./auto-categorize";
 import securityRouter from "./security";
 import promotionsRouter from "./promotions";
+import stocktakesRouter from "./stocktakes";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(autoBackupRouter);
 router.use(autoCategorizeRouter);
 router.use(securityRouter);
 router.use(promotionsRouter);
+router.use(stocktakesRouter);
 
 export default router;

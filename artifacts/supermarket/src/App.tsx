@@ -42,6 +42,7 @@ const EndOfDay = lazy(() => import("@/pages/end-of-day"));
 const SecurityPin = lazy(() => import("@/pages/security-pin"));
 const Promotions = lazy(() => import("@/pages/promotions"));
 const LoyaltyRewards = lazy(() => import("@/pages/loyalty-rewards"));
+const StocktakePage = lazy(() => import("@/pages/stocktake"));
 
 function PageLoader() {
   return (
@@ -186,6 +187,9 @@ function Router() {
       </Route>
       <Route path="/loyalty-rewards">
         <ProtectedRoute component={LoyaltyRewards} roles={["admin", "cashier"]} />
+      </Route>
+      <Route path="/stocktake">
+        <ProtectedRoute component={StocktakePage} roles={["admin", "buyer", "worker"]} />
       </Route>
       <Route>
         <Layout>
