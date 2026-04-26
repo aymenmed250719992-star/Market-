@@ -29,6 +29,7 @@ import autoCategorizeRouter from "./auto-categorize";
 import securityRouter from "./security";
 import promotionsRouter from "./promotions";
 import stocktakesRouter from "./stocktakes";
+import purchaseOrdersRouter from "./purchase-orders";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(autoCategorizeRouter);
 router.use(securityRouter);
 router.use(promotionsRouter);
 router.use(stocktakesRouter);
+router.use(purchaseOrdersRouter);
 
 export default router;

@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { ClipboardList, Camera, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Lock, Play } from "lucide-react";
+import { ClipboardList, Camera, Search, Plus, Trash2, CheckCircle2, AlertTriangle, Lock, Play, Sparkles } from "lucide-react";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
+import { AICountCamera } from "@/components/AICountCamera";
 import { format } from "date-fns";
 
 type Product = {
@@ -45,6 +46,7 @@ export default function Stocktake() {
   const [search, setSearch] = useState("");
   const [actualQty, setActualQty] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [aiCounterOpen, setAiCounterOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -343,6 +345,15 @@ export default function Stocktake() {
                           تسجيل
                         </Button>
                       </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => setAiCounterOpen(true)}
+                        className="w-full gap-2 border-primary/40 hover:bg-primary/10"
+                        data-testid="button-ai-count"
+                      >
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        احسب بالذكاء الاصطناعي عبر صورة
+                      </Button>
                       {actualQty !== "" && Number.isFinite(Number(actualQty)) && (
                         <DiffPreview expected={Number(selectedProduct.stock ?? 0)} actual={Number(actualQty)} />
                       )}
@@ -411,6 +422,15 @@ export default function Stocktake() {
       )}
 
       <BarcodeScanner open={scannerOpen} onClose={() => setScannerOpen(false)} onDetected={handleScanned} />
+      <AICountCamera
+        open={aiCounterOpen}
+        onClose={() => setAiCounterOpen(false)}
+        productName={selectedProduct?.name}
+        onCount={(n) => {
+          setActualQty(String(n));
+          toast({ title: "تم استعمال العدد من الذكاء الاصطناعي", description: `${n} وحدة` });
+        }}
+      />
     </div>
   );
 }

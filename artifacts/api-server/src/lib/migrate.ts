@@ -20,6 +20,7 @@ const COLLECTIONS = [
   "returns",
   "promotions",
   "stocktakes",
+  "purchase_orders",
 ] as const;
 
 const JSONB_INDEXES: Array<{ table: string; field: string; type?: "text" | "numeric" }> = [
@@ -41,6 +42,9 @@ const JSONB_INDEXES: Array<{ table: string; field: string; type?: "text" | "nume
   { table: "promotions", field: "active" },
   { table: "stocktakes", field: "status" },
   { table: "stocktakes", field: "createdAt" },
+  { table: "purchase_orders", field: "status" },
+  { table: "purchase_orders", field: "supplierName" },
+  { table: "purchase_orders", field: "createdAt" },
 ];
 
 export async function migrateSchema(): Promise<void> {

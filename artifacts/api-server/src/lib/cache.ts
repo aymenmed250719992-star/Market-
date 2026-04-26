@@ -133,3 +133,4 @@ export const onlineOrdersCache = new CollectionCache("online_orders");
 export const distributorOffersCache = new CollectionCache("distributor_offers");
 export const promotionsCache = new CollectionCache("promotions");
 export const stocktakesCache = new CollectionCache("stocktakes");
+export const purchaseOrdersCache = new CollectionCache("purchase_orders");

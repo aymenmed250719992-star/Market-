@@ -731,4 +731,58 @@ ${ctx.role === "admin"
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  AI Vision: count product units in an image
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/ai/count-products", async (req, res): Promise<void> => {
+  try {
+    const { image, productName } = req.body ?? {};
+    if (!image || typeof image !== "string") {
+      res.status(400).json({ error: "حقل الصورة مطلوب (base64 data URL)" });
+      return;
+    }
+    // Allow either a data URL or raw base64
+    const imageUrl = image.startsWith("data:") ? image : `data:image/jpeg;base64,${image}`;
+
+    const hint = productName
+      ? `المنتج المستهدف: "${productName}". عدّ فقط هذا المنتج، تجاهل ما عداه.`
+      : `عدّ كل وحدات المنتج المرئية في الصورة.`;
+
+    const completion = await openai.chat.completions.create({
+      model: MODEL,
+      messages: [
+        {
+          role: "system",
+          content:
+            "أنت مساعد متخصص في عدّ المنتجات في الصور لأغراض الجرد. أعطِ رقماً دقيقاً قدر الإمكان. أجب فقط بصيغة JSON بدون أي شرح إضافي.",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `${hint}\n\nأجب بصيغة JSON فقط على هذا الشكل:\n{"count": <عدد صحيح>, "confidence": "high"|"medium"|"low", "description": "<وصف موجز جداً للمنتجات المرئية>"}`,
+            },
+            { type: "image_url", image_url: { url: imageUrl } },
+          ],
+        },
+      ],
+      response_format: { type: "json_object" },
+    });
+
+    const raw = completion.choices?.[0]?.message?.content ?? "{}";
+    let parsed: any = {};
+    try { parsed = JSON.parse(raw); } catch {}
+    const count = Number.isFinite(Number(parsed.count)) ? Math.max(0, Math.floor(Number(parsed.count))) : 0;
+    res.json({
+      count,
+      confidence: parsed.confidence ?? "medium",
+      description: typeof parsed.description === "string" ? parsed.description : "",
+    });
+  } catch (err: any) {
+    req.log.error({ err: err?.message }, "AI count failed");
+    res.status(500).json({ error: "تعذّر تحليل الصورة. حاول مجدداً." });
+  }
+});
+
 export default router;

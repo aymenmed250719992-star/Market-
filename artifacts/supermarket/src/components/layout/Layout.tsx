@@ -91,6 +91,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/promotions", label: "العروض الترويجية", icon: Sparkles, roles: ["admin"] },
     { href: "/loyalty-rewards", label: "مكافآت الولاء", icon: Gift, roles: ["admin", "cashier"] },
     { href: "/stocktake", label: "الجرد والتدقيق", icon: ClipboardList, roles: ["admin", "buyer", "worker"] },
+    { href: "/purchase-orders", label: "طلبات الشراء", icon: Truck, roles: ["admin", "buyer"] },
   ];
 
   const visibleNavItems = navItems.filter((item) => item.roles.includes(user.role));
