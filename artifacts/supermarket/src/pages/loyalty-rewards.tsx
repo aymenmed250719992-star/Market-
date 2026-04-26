@@ -36,13 +36,15 @@ type Reward = {
   icon: string;
 };
 
-// Static catalog — easy to edit, no DB needed
+// كل نقطة = 10 دج (50 نقطة = 500 دج)
+const POINT_VALUE_DZD = 10;
+
 const REWARDS: Reward[] = [
-  { id: "v50", cost: 50, title: "قسيمة خصم ٥٠ دج", description: "قابلة للاستعمال في أي مشترى", icon: "🎟️" },
-  { id: "v100", cost: 100, title: "قسيمة خصم ١٠٠ دج", description: "خصم ١٠٠ دج على فاتورتك القادمة", icon: "🏷️" },
-  { id: "delivery", cost: 150, title: "توصيل مجاني", description: "توصيل مجاني للطلب القادم", icon: "🚚" },
-  { id: "v500", cost: 500, title: "قسيمة خصم ٥٠٠ دج", description: "خصم كبير على مشترياتك", icon: "💎" },
-  { id: "gift", cost: 1000, title: "هدية مفاجأة", description: "اختر هدية من المتجر بقيمة ١٠٠٠ دج", icon: "🎁" },
+  { id: "v500", cost: 50, title: "قسيمة خصم ٥٠٠ دج", description: "قابلة للاستعمال في أي مشترى", icon: "🎟️" },
+  { id: "v1000", cost: 100, title: "قسيمة خصم ١٠٠٠ دج", description: "خصم ١٠٠٠ دج على فاتورتك القادمة", icon: "🏷️" },
+  { id: "delivery", cost: 150, title: "توصيل مجاني + قسيمة ٥٠٠ دج", description: "توصيل مجاني للطلب القادم مع خصم", icon: "🚚" },
+  { id: "v5000", cost: 500, title: "قسيمة خصم ٥٠٠٠ دج", description: "خصم كبير على مشترياتك", icon: "💎" },
+  { id: "gift", cost: 1000, title: "هدية مفاجأة بقيمة ١٠٠٠٠ دج", description: "اختر هدية من المتجر بقيمة ١٠٠٠٠ دج", icon: "🎁" },
 ];
 
 export default function LoyaltyRewards() {
@@ -169,7 +171,10 @@ export default function LoyaltyRewards() {
                   {customer.loyaltyPoints} <span className="text-sm font-normal text-muted-foreground">نقطة</span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  ≈ {customer.loyaltyPoints} دج خصم متاح
+                  ≈ {customer.loyaltyPoints * POINT_VALUE_DZD} دج خصم متاح
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  تكسب نقطة لكل ٥٠٠ دج · كل نقطة = ١٠ دج
                 </div>
               </CardContent>
             </Card>

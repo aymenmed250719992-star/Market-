@@ -7,9 +7,9 @@ import { getRequestUser, logAudit, auditCache } from "../lib/audit";
 
 const router: IRouter = Router();
 
-// 1 point per 100 DZD spent. 1 point = 1 DZD discount when redeemed.
-export const LOYALTY_POINTS_PER_DZD = 1 / 100;
-export const LOYALTY_REDEEM_RATE = 1;
+// 1 point per 500 DZD spent. 1 point = 10 DZD discount (50 points = 500 DZD).
+export const LOYALTY_POINTS_PER_DZD = 1 / 500;
+export const LOYALTY_REDEEM_RATE = 10;
 
 export function calcEarnedPoints(amount: number): number {
   return Math.floor(amount * LOYALTY_POINTS_PER_DZD);
@@ -107,7 +107,7 @@ router.get("/loyalty/info", async (_req, res): Promise<void> => {
   res.json({
     pointsPerDzd: LOYALTY_POINTS_PER_DZD,
     redeemRate: LOYALTY_REDEEM_RATE,
-    description: "تكسب نقطة واحدة لكل 100 دج. كل نقطة = 1 دج خصم عند الاستبدال.",
+    description: "تكسب نقطة واحدة لكل 500 دج. كل 50 نقطة = 500 دج خصم (نقطة = 10 دج).",
   });
 });
 
