@@ -144,7 +144,7 @@ router.post("/sales", async (req, res): Promise<void> => {
   // Award loyalty points (1 point per 100 DZD spent) to the customer when one is attached.
   let earnedPoints = 0;
   if (parsed.data.customerId) {
-    earnedPoints = await awardCustomerPoints(parsed.data.customerId, total);
+    earnedPoints = await awardCustomerPoints(parsed.data.customerId, total, req);
   }
 
   await logAudit(req, "create", "sale", id, {

@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
+import type { Request } from "express";
 import { z } from "zod";
 import { customersCache } from "../lib/cache";
 import { tsToDate } from "../lib/firebase";
-import { getRequestUser, logAudit } from "../lib/audit";
+import { getRequestUser, logAudit, auditCache } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -14,7 +15,11 @@ export function calcEarnedPoints(amount: number): number {
   return Math.floor(amount * LOYALTY_POINTS_PER_DZD);
 }
 
-export async function awardCustomerPoints(customerId: number, amount: number): Promise<number> {
+export async function awardCustomerPoints(
+  customerId: number,
+  amount: number,
+  req?: Request | null,
+): Promise<number> {
   const customer = await customersCache.get(customerId);
   if (!customer) return 0;
   const points = calcEarnedPoints(amount);
@@ -23,6 +28,12 @@ export async function awardCustomerPoints(customerId: number, amount: number): P
   await customersCache.update(customerId, {
     loyaltyPoints: current + points,
     updatedAt: new Date(),
+  });
+  // Track earn event for history
+  await logAudit(req ?? null, "earn", "loyalty", customerId, {
+    points,
+    amount,
+    balance: current + points,
   });
   return points;
 }
@@ -62,6 +73,7 @@ router.post("/customers/:id/redeem-points", async (req, res): Promise<void> => {
   await logAudit(req, "redeem", "loyalty", idNum, {
     points: parsed.data.points,
     note: parsed.data.note ?? null,
+    balance: remaining,
   });
   res.json({
     customerId: idNum,
@@ -69,6 +81,26 @@ router.post("/customers/:id/redeem-points", async (req, res): Promise<void> => {
     discount: parsed.data.points * LOYALTY_REDEEM_RATE,
     loyaltyPoints: remaining,
   });
+});
+
+// Loyalty history (earn + redeem events) for a customer
+router.get("/customers/:id/loyalty-history", async (req, res): Promise<void> => {
+  const idNum = parseInt(req.params.id as string, 10);
+  const all = await auditCache.all();
+  const events = all
+    .filter(({ data }) => data.entity === "loyalty" && Number(data.entityId) === idNum)
+    .map(({ id, data }) => ({
+      id,
+      action: data.action,
+      points: Number(data.details?.points ?? 0),
+      amount: Number(data.details?.amount ?? 0),
+      balance: data.details?.balance != null ? Number(data.details.balance) : null,
+      note: data.details?.note ?? null,
+      userName: data.userName ?? null,
+      createdAt: tsToDate(data.createdAt),
+    }))
+    .sort((a, b) => +b.createdAt - +a.createdAt);
+  res.json(events);
 });
 
 router.get("/loyalty/info", async (_req, res): Promise<void> => {

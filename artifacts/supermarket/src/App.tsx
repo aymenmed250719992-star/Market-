@@ -41,6 +41,7 @@ const OffersPublic = lazy(() => import("@/pages/offers-public"));
 const EndOfDay = lazy(() => import("@/pages/end-of-day"));
 const SecurityPin = lazy(() => import("@/pages/security-pin"));
 const Promotions = lazy(() => import("@/pages/promotions"));
+const LoyaltyRewards = lazy(() => import("@/pages/loyalty-rewards"));
 
 function PageLoader() {
   return (
@@ -182,6 +183,9 @@ function Router() {
       </Route>
       <Route path="/promotions">
         <ProtectedRoute component={Promotions} roles={["admin"]} />
+      </Route>
+      <Route path="/loyalty-rewards">
+        <ProtectedRoute component={LoyaltyRewards} roles={["admin", "cashier"]} />
       </Route>
       <Route>
         <Layout>

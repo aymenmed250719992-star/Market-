@@ -33,6 +33,7 @@ import {
   Shield,
   Tag,
   Search,
+  Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
@@ -87,6 +88,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/security-pin", label: "رمز PIN للأمان", icon: Shield, roles: ["admin"] },
     { href: "/offers", label: "صفحة العروض العامة", icon: Tag, roles: ["admin"] },
     { href: "/promotions", label: "العروض الترويجية", icon: Sparkles, roles: ["admin"] },
+    { href: "/loyalty-rewards", label: "مكافآت الولاء", icon: Gift, roles: ["admin", "cashier"] },
   ];
 
   const visibleNavItems = navItems.filter((item) => item.roles.includes(user.role));
